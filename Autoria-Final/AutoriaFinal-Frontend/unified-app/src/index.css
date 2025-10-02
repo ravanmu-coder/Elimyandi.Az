@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Dropdown Styles for Vehicle Finder */
+.custom-dropdown {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+}
+
+.custom-dropdown option {
+  background-color: #0F172A !important;
+  color: #FFFFFF !important;
+  padding: 0.5rem;
+}
+
+.custom-dropdown option:hover {
+  background-color: #3B82F6 !important;
+  color: #FFFFFF !important;
+}
+
+.custom-dropdown option:checked {
+  background-color: #3B82F6 !important;
+  color: #FFFFFF !important;
+}
+
+.custom-dropdown option:focus {
+  background-color: #3B82F6 !important;
+  color: #FFFFFF !important;
+}
