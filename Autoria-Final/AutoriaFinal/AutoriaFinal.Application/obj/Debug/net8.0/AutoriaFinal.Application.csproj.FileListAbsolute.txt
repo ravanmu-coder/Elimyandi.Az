@@ -78,3 +78,5 @@ C:\Users\Ravan\Desktop\AutotiaFinalProject\Autoria-Final\AutoriaFinal\AutoriaFin
 C:\Users\Ravan\Desktop\AutotiaFinalProject\Autoria-Final\AutoriaFinal\AutoriaFinal.Application\obj\Debug\net8.0\refint\AutoriaFinal.Application.dll
 C:\Users\Ravan\Desktop\AutotiaFinalProject\Autoria-Final\AutoriaFinal\AutoriaFinal.Application\obj\Debug\net8.0\AutoriaFinal.Application.pdb
 C:\Users\Ravan\Desktop\AutotiaFinalProject\Autoria-Final\AutoriaFinal\AutoriaFinal.Application\obj\Debug\net8.0\ref\AutoriaFinal.Application.dll
+C:\Users\Ravan\Desktop\AutotiaFinalProject\Autoria-Final\AutoriaFinal\AutoriaFinal.Application\bin\Debug\net8.0\AutoriaFinal.Persistence.dll
+C:\Users\Ravan\Desktop\AutotiaFinalProject\Autoria-Final\AutoriaFinal\AutoriaFinal.Application\bin\Debug\net8.0\AutoriaFinal.Persistence.pdb

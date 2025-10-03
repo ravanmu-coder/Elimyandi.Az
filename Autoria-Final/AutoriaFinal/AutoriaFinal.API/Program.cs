@@ -13,10 +13,14 @@ using System.Text;
 using System.Threading.Tasks;
 using Serilog;
 using AutoriaFinal.API.ExceptionHandler;
-using AutoriaFinal.API.Hubs;
 using AutoriaFinal.Infrastructure.Services.Token;
 using AutoriaFinal.Infrastructure.Services.Email;
 using Microsoft.AspNetCore.Http.Features;
+using AutoriaFinal.Infrastructure.Hubs;
+using AutoriaFinal.Domain.Entities.Options;
+using AutoriaFinal.Infrastructure.Services;
+using AutoriaFinal.Infrastructure.Services.AiServices.InitialEstimate;
+using System;
 
 namespace AutoriaFinal.API
 {
@@ -25,6 +29,9 @@ namespace AutoriaFinal.API
         public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            // Read environment variables too
+            builder.Configuration.AddEnvironmentVariables();
 
             // ✅ CORS - DEVELOPMENT ÜÇÜN TAM AÇIQ
             builder.Services.AddCors(options =>
@@ -77,12 +84,22 @@ namespace AutoriaFinal.API
 
             // ✅ DbContext
             builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("AutoriaDbContext")));
-
+                options.UseSqlServer(builder.Configuration.GetConnectionString("AutoriaDbContext")));
 
             // ✅ Repository & Application services
             builder.Services.AddRepositoriesRegistration();
             builder.Services.AddServiceRegistration();
+
+            // --- ADD GEMINI REST DI ---
+            builder.Services.AddHttpClient<RestGeminiClient>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(30);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoriaFinal/1.0 (GeminiDevApiClient)");
+            });
+
+            builder.Services.AddSingleton<GeminiVehicleValuationServiceRest>();
+
+
             // ✅ Multipart limits
             builder.Services.Configure<FormOptions>(options =>
             {
@@ -93,6 +110,12 @@ namespace AutoriaFinal.API
             builder.Services.Configure<EmailSettings>(
                 builder.Configuration.GetSection("Email"));
             builder.Services.AddInfrastructureServices();
+
+            builder.Services.Configure<AuctionSchedulerOptions>(
+               builder.Configuration.GetSection("AuctionScheduler"));
+
+            // Register the background scheduler service (it will start with the app)
+            builder.Services.AddHostedService<AuctionSchedulerService>();
 
             // ✅ Identity
             builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>

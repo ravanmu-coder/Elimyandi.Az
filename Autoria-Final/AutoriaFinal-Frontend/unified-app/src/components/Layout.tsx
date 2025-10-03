@@ -424,7 +424,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-900 to-slate-900">
       {/* Main Navigation - Advanced Glassmorphism */}
-      <nav className="bg-gradient-to-b from-slate-900/80 to-slate-900/70 backdrop-blur-xl border-b border-white/10 shadow-2xl relative z-50">
+      <nav className="bg-gradient-to-b from-slate-900/80 to-slate-900/70 backdrop-blur-xl border-b border-white/10 shadow-2xl relative z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
@@ -576,7 +576,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </nav>
 
       {/* Secondary Navigation - Advanced Glassmorphism */}
-      <nav className="relative bg-gradient-to-b from-slate-900/60 to-slate-900/40 backdrop-blur-xl border-b border-white/5 shadow-2xl">
+      <nav className="relative bg-gradient-to-b from-slate-900/60 to-slate-900/40 backdrop-blur-xl border-b border-white/5 shadow-2xl z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-12">
             {/* Role Indicator - Enhanced Glassmorphism */}
@@ -622,13 +622,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </Link>
               
               {/* Inventory Dropdown */}
-              <div className="relative group z-[99999]">
+              <div className="relative group z-40">
                 <button className="relative flex items-center text-slate-300 hover:text-white transition-all duration-300 ease-in-out text-sm font-medium px-4 py-2 rounded-full group">
                   <span className="relative z-10">{t('menu.inventory')}</span>
                   <ChevronDown className="h-4 w-4 ml-1 relative z-10" />
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-600/50 to-blue-500/30 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 ease-in-out ring-1 ring-white/20"></div>
                 </button>
-                <div className="absolute top-full left-0 mt-3 w-56 z-[99999] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
+                <div className="absolute top-full left-0 mt-3 w-56 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
                   <div className="py-3">
                     <Link to="/vehicle-finder" className="block px-4 py-3 text-sm text-slate-300 hover:text-white transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-blue-600/20 hover:to-blue-500/10 relative group rounded-xl mx-2">
                       {t('dropdown.vehicleFinder')}
@@ -644,13 +644,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
 
               {/* Auctions Dropdown */}
-              <div className="relative group z-[99999]">
+              <div className="relative group z-40">
                 <button className="relative flex items-center text-slate-300 hover:text-white transition-all duration-300 ease-in-out text-sm font-medium px-4 py-2 rounded-full group">
                   <span className="relative z-10">{t('menu.auctions')}</span>
                   <ChevronDown className="h-4 w-4 ml-1 relative z-10" />
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-600/50 to-blue-500/30 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 ease-in-out ring-1 ring-white/20"></div>
                 </button>
-                <div className="absolute top-full left-0 mt-3 w-56 z-[99999] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
+                <div className="absolute top-full left-0 mt-3 w-56 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
                   <div className="py-3">
                     <Link to="/todays-auctions" className="block px-4 py-3 text-sm text-slate-300 hover:text-white transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-blue-600/20 hover:to-blue-500/10 relative group rounded-xl mx-2">
                       {t('dropdown.todaysAuction')}
@@ -666,13 +666,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
 
               {/* Bids Dropdown */}
-              <div className="relative group z-[99999]">
+              <div className="relative group z-40">
                 <button className="relative flex items-center text-slate-300 hover:text-white transition-all duration-300 ease-in-out text-sm font-medium px-4 py-2 rounded-full group">
                   <span className="relative z-10">{t('menu.bids')}</span>
                   <ChevronDown className="h-4 w-4 ml-1 relative z-10" />
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-600/50 to-blue-500/30 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 ease-in-out ring-1 ring-white/20"></div>
                 </button>
-                <div className="absolute top-full left-0 mt-3 w-56 z-[99999] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
+                <div className="absolute top-full left-0 mt-3 w-56 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
                   <div className="py-3">
                     <Link to="/my-bids" className="block px-4 py-3 text-sm text-slate-300 hover:text-white transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-blue-600/20 hover:to-blue-500/10 relative group rounded-xl mx-2">
                       {t('dropdown.myBids')}
@@ -695,13 +695,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 const roles = user?.user?.roles;
                 const isSeller = roles && roles.includes('Seller');
                 return isSeller && (
-                  <div className="relative group z-[99999]">
+                  <div className="relative group z-40">
                     <button className="relative flex items-center text-slate-300 hover:text-white transition-all duration-300 ease-in-out text-sm font-medium px-4 py-2 rounded-full group">
                       <span className="relative z-10">Vehicle</span>
                       <ChevronDown className="h-4 w-4 ml-1 relative z-10" />
                       <div className="absolute inset-0 bg-gradient-to-r from-blue-600/50 to-blue-500/30 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 ease-in-out ring-1 ring-white/20"></div>
                     </button>
-                    <div className="absolute top-full left-0 mt-3 w-56 z-[99999] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
+                    <div className="absolute top-full left-0 mt-3 w-56 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
                       <div className="py-3">
                         <Link to="/add-vehicle" className="block px-4 py-3 text-sm text-slate-300 hover:text-white transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-blue-600/20 hover:to-blue-500/10 relative group rounded-xl mx-2">
                           <Plus className="h-4 w-4 mr-2 inline" />
@@ -726,13 +726,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </Link>
 
               {/* Services & Support Dropdown */}
-              <div className="relative group z-[99999]">
+              <div className="relative group z-40">
                 <button className="relative flex items-center text-slate-300 hover:text-white transition-all duration-300 ease-in-out text-sm font-medium px-4 py-2 rounded-full group">
                   <span className="relative z-10">{t('menu.services')}</span>
                   <ChevronDown className="h-4 w-4 ml-1 relative z-10" />
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-600/50 to-blue-500/30 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 ease-in-out ring-1 ring-white/20"></div>
                 </button>
-                <div className="absolute top-full left-0 mt-3 w-56 z-[99999] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
+                <div className="absolute top-full left-0 mt-3 w-56 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
                   <div className="py-3">
                     <Link to="/about-us" className="block px-4 py-3 text-sm text-slate-300 hover:text-white transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-blue-600/20 hover:to-blue-500/10 relative group rounded-xl mx-2">
                       {t('dropdown.aboutUs')}

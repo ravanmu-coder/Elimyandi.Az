@@ -377,6 +377,9 @@
             "projectReferences": {
               "C:\\Users\\Ravan\\Desktop\\AutotiaFinalProject\\Autoria-Final\\AutoriaFinal\\AutoriaFinal.Contract\\AutoriaFinal.Contract.csproj": {
                 "projectPath": "C:\\Users\\Ravan\\Desktop\\AutotiaFinalProject\\Autoria-Final\\AutoriaFinal\\AutoriaFinal.Contract\\AutoriaFinal.Contract.csproj"
+              },
+              "C:\\Users\\Ravan\\Desktop\\AutotiaFinalProject\\Autoria-Final\\AutoriaFinal\\AutoriaFinal.Persistence\\AutoriaFinal.Persistence.csproj": {
+                "projectPath": "C:\\Users\\Ravan\\Desktop\\AutotiaFinalProject\\Autoria-Final\\AutoriaFinal\\AutoriaFinal.Persistence\\AutoriaFinal.Persistence.csproj"
               }
             }
           }
@@ -397,6 +400,10 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "dependencies": {
+            "Google.Cloud.AIPlatform.V1": {
+              "target": "Package",
+              "version": "[3.47.0, )"
+            },
             "Microsoft.AspNetCore.Authentication.JwtBearer": {
               "target": "Package",
               "version": "[8.0.19, )"

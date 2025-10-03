@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useLanguage } from '../hooks/useLanguage.tsx';
 import { 
   Car, 
   Users, 
   Shield, 
   Award, 
-  ArrowRight, 
   CheckCircle, 
   Clock, 
   Phone, 
@@ -19,29 +18,6 @@ import {
 
 export default function AboutUs() {
   const { t } = useLanguage();
-  const [formData, setFormData] = useState({
-    make: '',
-    model: '',
-    year: '',
-    mileage: '',
-    condition: '',
-    phone: '',
-    email: ''
-  });
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Handle form submission
-    console.log('Form submitted:', formData);
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-900 to-slate-900">
@@ -107,7 +83,7 @@ export default function AboutUs() {
               </div>
             </div>
 
-            {/* Right Content - CTA Card */}
+            {/* Right Content - Company Info Card */}
             <div className="relative">
               {/* Glassmorphism Card */}
               <div className="relative bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-8 shadow-2xl">
@@ -116,129 +92,48 @@ export default function AboutUs() {
                 
                 <div className="relative z-10">
                   <div className="text-center mb-8">
-                    <h3 className="text-2xl font-bold text-white mb-2">İlkin Qiymətləndirmə Al</h3>
-                    <p className="text-slate-300">Avtomobilinizin dəyərini dərhal öyrənin</p>
+                    <h3 className="text-2xl font-bold text-white mb-2">Bizimlə Əlaqə</h3>
+                    <p className="text-slate-300">Avtomobil satışında etibarlı tərəfdaşınız</p>
                   </div>
 
-                  <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Marka</label>
-                        <select
-                          name="make"
-                          value={formData.make}
-                          onChange={handleInputChange}
-                          className="w-full bg-slate-700/50 border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all duration-300"
-                          required
-                        >
-                          <option value="">Seçin</option>
-                          <option value="BMW">BMW</option>
-                          <option value="Mercedes">Mercedes</option>
-                          <option value="Audi">Audi</option>
-                          <option value="Toyota">Toyota</option>
-                          <option value="Hyundai">Hyundai</option>
-                        </select>
+                  <div className="space-y-6">
+                    <div className="flex items-center space-x-4">
+                      <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-full p-3">
+                        <Phone className="h-6 w-6 text-white" />
                       </div>
-                      
                       <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Model</label>
-                        <input
-                          type="text"
-                          name="model"
-                          value={formData.model}
-                          onChange={handleInputChange}
-                          className="w-full bg-slate-700/50 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all duration-300"
-                          placeholder="Model adı"
-                          required
-                        />
+                        <h4 className="text-white font-semibold">Telefon</h4>
+                        <p className="text-slate-300">+994 12 XXX XX XX</p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">İl</label>
-                        <select
-                          name="year"
-                          value={formData.year}
-                          onChange={handleInputChange}
-                          className="w-full bg-slate-700/50 border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all duration-300"
-                          required
-                        >
-                          <option value="">Seçin</option>
-                          {Array.from({ length: 25 }, (_, i) => 2024 - i).map(year => (
-                            <option key={year} value={year}>{year}</option>
-                          ))}
-                        </select>
+                    <div className="flex items-center space-x-4">
+                      <div className="bg-gradient-to-r from-green-500 to-blue-600 rounded-full p-3">
+                        <Mail className="h-6 w-6 text-white" />
                       </div>
-                      
                       <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Kilometraj</label>
-                        <input
-                          type="number"
-                          name="mileage"
-                          value={formData.mileage}
-                          onChange={handleInputChange}
-                          className="w-full bg-slate-700/50 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all duration-300"
-                          placeholder="km"
-                          required
-                        />
+                        <h4 className="text-white font-semibold">Email</h4>
+                        <p className="text-slate-300">info@elimyandi.az</p>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Vəziyyət</label>
-                      <select
-                        name="condition"
-                        value={formData.condition}
-                        onChange={handleInputChange}
-                        className="w-full bg-slate-700/50 border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all duration-300"
-                        required
-                      >
-                        <option value="">Seçin</option>
-                        <option value="excellent">Əla</option>
-                        <option value="good">Yaxşı</option>
-                        <option value="fair">Orta</option>
-                        <option value="poor">Zəif</option>
-                        <option value="damaged">Qəzalı</option>
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Telefon</label>
-                        <input
-                          type="tel"
-                          name="phone"
-                          value={formData.phone}
-                          onChange={handleInputChange}
-                          className="w-full bg-slate-700/50 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all duration-300"
-                          placeholder="+994 XX XXX XX XX"
-                          required
-                        />
+                    <div className="flex items-center space-x-4">
+                      <div className="bg-gradient-to-r from-purple-500 to-pink-600 rounded-full p-3">
+                        <MapPin className="h-6 w-6 text-white" />
                       </div>
-                      
                       <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
-                        <input
-                          type="email"
-                          name="email"
-                          value={formData.email}
-                          onChange={handleInputChange}
-                          className="w-full bg-slate-700/50 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all duration-300"
-                          placeholder="email@example.com"
-                          required
-                        />
+                        <h4 className="text-white font-semibold">Ünvan</h4>
+                        <p className="text-slate-300">Bakı şəhəri, Nəsimi rayonu</p>
                       </div>
                     </div>
 
-                    <button
-                      type="submit"
-                      className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold py-4 px-6 rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-blue-500/25 flex items-center justify-center space-x-2 group"
-                    >
-                      <span>Qiymətləndirmə Al</span>
-                      <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform duration-300" />
-                    </button>
-                  </form>
+                    <div className="pt-4 border-t border-slate-600/50">
+                      <p className="text-slate-300 text-sm text-center">
+                        Avtomobilinizi satmaq istəyirsiniz? Bizimlə əlaqə saxlayın və 
+                        pulsuz qiymətləndirmə alın.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

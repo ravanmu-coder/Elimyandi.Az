@@ -3262,7 +3262,7 @@
   },
   {
     "ContainingType": "AutoriaFinal.API.Program\u002B\u003C\u003Ec",
-    "Method": "\u003CMain\u003Eb__0_14",
+    "Method": "\u003CMain\u003Eb__0_15",
     "RelativePath": "api/info",
     "HttpMethod": "GET",
     "IsController": false,
@@ -3356,8 +3356,29 @@
     "ReturnTypes": []
   },
   {
+    "ContainingType": "AutoriaFinal.API.Controllers.Ai.ValuationController",
+    "Method": "Estimate",
+    "RelativePath": "api/Valuation/estimate",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "vehicle",
+        "Type": "AutoriaFinal.Contract.Dtos.Ai.InitialEstimate.VehicleDetailsDto",
+        "IsRequired": true
+      },
+      {
+        "Name": "askingPrice",
+        "Type": "System.Nullable\u00601[[System.Decimal, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
     "ContainingType": "AutoriaFinal.API.Program\u002B\u003C\u003Ec__DisplayClass0_0",
-    "Method": "\u003CMain\u003Eb__13",
+    "Method": "\u003CMain\u003Eb__14",
     "RelativePath": "health",
     "HttpMethod": "GET",
     "IsController": false,

@@ -119,5 +119,27 @@ namespace AutoriaFinal.Persistence.Repositories.Auctions
                 .OrderByDescending(a => a.CreatedAt)
                 .ToListAsync();
         }
+
+        // Atomic update already present in your codebase (kept as-is)
+        public async Task<bool> TryTransitionAuctionStatusAsync(Guid auctionId, AuctionStatus expectedStatus, AuctionStatus newStatus, CancellationToken ct = default)
+        {
+            var rows = await _context.Database.ExecuteSqlInterpolatedAsync($@"
+        UPDATE Auctions
+        SET Status = {(int)newStatus}, UpdatedAtUtc = {DateTime.UtcNow}
+        WHERE Id = {auctionId} AND Status = {(int)expectedStatus}", ct);
+
+            return rows > 0;
+        }
+
+        // <-- NEW: DB-side filter: get running auctions whose EndTimeUtc <= asOfUtc
+        public async Task<IEnumerable<Auction>> GetActiveAuctionsReadyToEndAsync(DateTime asOfUtc, int limit = 100)
+        {
+            return await _context.Auctions
+                .Where(a => a.Status == AuctionStatus.Running && a.EndTimeUtc <= asOfUtc)
+                .Include(a => a.AuctionCars)
+                .OrderBy(a => a.EndTimeUtc)
+                .Take(limit)
+                .ToListAsync();
+        }
     }
 }

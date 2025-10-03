@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace AutoriaFinal.Domain.Repositories.Auctions
 {
-    
+
     public interface IAuctionRepository : IGenericRepository<Auction>
     {
         Task<IEnumerable<Auction>> GetActiveAuctionsAsync();
@@ -20,5 +20,11 @@ namespace AutoriaFinal.Domain.Repositories.Auctions
         Task<IEnumerable<Auction>> GetScheduledAuctionsReadyToStartAsync(); // Başlamağa hazır olan auction-lar
         Task<Auction?> GetNextScheduledAuctionAsync(); // Növbəti planlaşdırılmış auction
         Task<IEnumerable<Auction>> GetAuctionsByStatusAsync(AuctionStatus status); // Status-a görə auction-lar
+
+        // atomic transition - DB səviyyəsində UPDATE ... WHERE Status = expected
+        Task<bool> TryTransitionAuctionStatusAsync(Guid auctionId, AuctionStatus expectedStatus, AuctionStatus newStatus, CancellationToken ct = default);
+
+        // DB-side filter to get running auctions that should end by "asOfUtc"
+        Task<IEnumerable<Auction>> GetActiveAuctionsReadyToEndAsync(DateTime asOfUtc, int limit = 100);
     }
 }

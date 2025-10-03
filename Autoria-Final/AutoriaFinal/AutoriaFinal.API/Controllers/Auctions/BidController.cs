@@ -1,7 +1,7 @@
-﻿using AutoriaFinal.API.Hubs;
-using AutoriaFinal.Contract.Dtos.Auctions.Bid;
+﻿using AutoriaFinal.Contract.Dtos.Auctions.Bid;
 using AutoriaFinal.Contract.Enums.Bids;
 using AutoriaFinal.Contract.Services.Auctions;
+using AutoriaFinal.Infrastructure.Hubs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;

@@ -1,4 +1,5 @@
-﻿using AutoriaFinal.Domain.Entities.Auctions;
+﻿using AutoriaFinal.Domain.Entities.Ai.InitialEstimate;
+using AutoriaFinal.Domain.Entities.Auctions;
 using AutoriaFinal.Domain.Entities.Billing;
 using AutoriaFinal.Domain.Entities.Identity;
 using AutoriaFinal.Domain.Entities.Logistics;
@@ -15,6 +16,7 @@ namespace AutoriaFinal.Persistence.Data
 {
     public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, string>
     {
+
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
         // DbSets — Identity

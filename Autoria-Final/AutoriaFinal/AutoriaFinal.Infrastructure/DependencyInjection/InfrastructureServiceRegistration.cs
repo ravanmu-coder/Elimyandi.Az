@@ -1,6 +1,7 @@
 ﻿using AutoriaFinal.Contract.Services;
 using AutoriaFinal.Contract.Services.Email;
 using AutoriaFinal.Contract.Services.Token;
+using AutoriaFinal.Domain.Repositories.Auctions;
 using AutoriaFinal.Infrastructure.Services;
 using AutoriaFinal.Infrastructure.Services.Email;
 using AutoriaFinal.Infrastructure.Services.Token;

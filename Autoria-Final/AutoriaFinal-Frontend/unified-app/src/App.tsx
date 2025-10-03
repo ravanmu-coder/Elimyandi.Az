@@ -31,6 +31,7 @@ import AdminLogin from './pages/AdminLogin';
 import Locations from './pages/Locations';
 import LocationDetail from './pages/LocationDetail.tsx';
 import AboutUs from './pages/AboutUs';
+import AIValuation from './pages/AIValuation';
 
 // Admin Pages
 import AdminApp from './admin/App';
@@ -173,6 +174,12 @@ function App() {
                   } />
                   
                   <Route path="/about-us" element={<AboutUs />} />
+                  
+                  <Route path="/ai-valuation" element={
+                    <ProtectedRoute>
+                      <AIValuation />
+                    </ProtectedRoute>
+                  } />
                   
                   {/* Fallback */}
                   <Route path="*" element={<Navigate to="/" replace />} />

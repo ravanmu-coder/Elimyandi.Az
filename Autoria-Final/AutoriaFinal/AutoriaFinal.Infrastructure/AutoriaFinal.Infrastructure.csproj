@@ -12,11 +12,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <PackageReference Include="Google.Cloud.AIPlatform.V1" Version="3.47.0" />
 	  <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.19" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\AutoriaFinal.Contract\AutoriaFinal.Contract.csproj" />
+		<ProjectReference Include="..\AutoriaFinal.Persistence\AutoriaFinal.Persistence.csproj" />
 	</ItemGroup>
 
 </Project>

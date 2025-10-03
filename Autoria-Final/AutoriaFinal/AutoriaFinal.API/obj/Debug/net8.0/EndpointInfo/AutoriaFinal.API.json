@@ -5802,6 +5802,47 @@
           }
         }
       }
+    },
+    "/api/Valuation/estimate": {
+      "post": {
+        "tags": [
+          "Valuation"
+        ],
+        "parameters": [
+          {
+            "name": "askingPrice",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VehicleDetailsDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VehicleDetailsDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/VehicleDetailsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8714,6 +8755,52 @@
           }
         },
         "additionalProperties": { }
+      },
+      "VehicleDetailsDto": {
+        "required": [
+          "make",
+          "model"
+        ],
+        "type": "object",
+        "properties": {
+          "make": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "model": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "year": {
+            "maximum": 2100,
+            "minimum": 1886,
+            "type": "integer",
+            "format": "int32"
+          },
+          "mileage": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": "integer",
+            "format": "int32"
+          },
+          "region": {
+            "type": "string",
+            "nullable": true
+          },
+          "damageDescription": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "conditionDescription": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
       },
       "WinnerIntegrityReportDto": {
         "type": "object",
