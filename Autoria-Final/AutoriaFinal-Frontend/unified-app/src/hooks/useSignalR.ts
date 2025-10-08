@@ -1,332 +1,239 @@
-import { useEffect, useRef, useState } from 'react';
-import * as signalR from '@microsoft/signalr';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import SignalRManager, { ConnectionState, SignalREvents, SignalRConfig } from '../utils/signalRManager';
 
-interface SignalRConfig {
-  baseUrl: string;
-  token: string;
-}
-
-interface AuctionEvents {
-  onPriceUpdated: (data: { auctionCarId: string; newPrice: number; bidCount: number }) => void;
-  onBidPlaced: (data: { auctionCarId: string; bid: any }) => void;
-  onCarMoved: (data: { previousCarId: string; nextCarId: string; nextLot: string }) => void;
-  onTimerTick: (data: { auctionCarId: string; remainingSeconds: number }) => void;
-  onAuctionStarted: (data: { auctionId: string }) => void;
-  onAuctionStopped: (data: { auctionId: string }) => void;
-  // New events according to backend logic
-  onNewLiveBid: (data: { auctionCarId: string; bid: any }) => void;
-  onPreBidPlaced: (data: { auctionCarId: string; bid: any }) => void;
-  onHighestBidUpdated: (data: { auctionCarId: string; highestBid: any }) => void;
-  onAuctionTimerReset: (data: { auctionCarId: string; newTimerSeconds: number }) => void;
-  onAuctionExtended: (data: { auctionId: string; extensionMinutes: number }) => void;
-  onAuctionEnded: (data: { auctionId: string; winner: any; finalPrice: number }) => void;
-}
-
-interface ConnectionState {
+// Hook return type
+interface UseSignalRReturn {
+  // Connection state
+  connectionState: ConnectionState;
   isConnected: boolean;
   isConnecting: boolean;
   isReconnecting: boolean;
-  error: string | null;
+  isFailed: boolean;
+  lastError?: string;
+  retryCount: number;
+  
+  // Connection methods
+  connect: () => Promise<void>;
+  disconnect: () => Promise<void>;
+  reconnect: () => Promise<void>;
+  waitForConnection: (timeoutMs?: number) => Promise<boolean>;
+  waitForState: (targetState: ConnectionState, timeoutMs?: number) => Promise<boolean>;
+  
+  // Group management
+  joinGroup: (groupName: string, hubType?: 'auction' | 'bid') => Promise<void>;
+  leaveGroup: (groupName: string, hubType?: 'auction' | 'bid') => Promise<void>;
+  
+  // Hub method calls
+  invoke: (methodName: string, ...args: any[]) => Promise<any>;
+  
+  // Convenience methods for common operations
+  joinAuction: (auctionId: string) => Promise<void>;
+  leaveAuction: (auctionId: string) => Promise<void>;
+  joinAuctionCar: (auctionCarId: string) => Promise<void>;
+  leaveAuctionCar: (auctionCarId: string) => Promise<void>;
+  
+  // Bidding methods
+  placeLiveBid: (auctionCarId: string, amount: number) => Promise<boolean>;
+  placePreBid: (auctionCarId: string, amount: number) => Promise<boolean>;
+  placeProxyBid: (auctionCarId: string, maxAmount: number, startAmount: number) => Promise<boolean>;
+  cancelProxyBid: (auctionCarId: string) => Promise<boolean>;
 }
 
-export const useSignalR = (config: SignalRConfig, events: AuctionEvents) => {
-  const [connectionState, setConnectionState] = useState<ConnectionState>({
-    isConnected: false,
-    isConnecting: false,
-    isReconnecting: false,
-    error: null
-  });
+// Hook configuration
+interface UseSignalRConfig extends SignalRConfig {
+  autoConnect?: boolean;
+  events?: SignalREvents;
+}
 
-  const auctionHubRef = useRef<signalR.HubConnection | null>(null);
-  const bidHubRef = useRef<signalR.HubConnection | null>(null);
-  const isConnectingRef = useRef<boolean>(false);
-  const retryCountRef = useRef<number>(0);
-  const maxRetries = 5;
+/**
+ * React hook for SignalR connection management
+ * Uses singleton SignalRManager to prevent multiple connections
+ */
+export const useSignalR = (config: UseSignalRConfig): UseSignalRReturn => {
+  const manager = useRef(SignalRManager.getInstance());
+  const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
+  const [lastError, setLastError] = useState<string | undefined>();
+  const [retryCount, setRetryCount] = useState(0);
+  const isInitialized = useRef(false);
 
-  const connect = async (auctionId: string, auctionCarId?: string) => {
-    // Prevent multiple simultaneous connections
-    if (isConnectingRef.current || connectionState.isConnected) {
-      console.log('Connection already in progress or connected, skipping...');
-      return;
+  // Initialize manager configuration
+  useEffect(() => {
+    if (!isInitialized.current) {
+      manager.current.configure(config);
+      
+      // Set up event handlers
+      const eventHandlers: SignalREvents = {
+        onConnectionStateChanged: (state, error) => {
+          setConnectionState(state);
+          setLastError(error);
+          setRetryCount(manager.current.getRetryCount());
+          config.events?.onConnectionStateChanged?.(state, error);
+        },
+        ...config.events
+      };
+      
+      manager.current.setEventHandlers(eventHandlers);
+      
+      // Set initial state
+      setConnectionState(manager.current.getConnectionState());
+      setRetryCount(manager.current.getRetryCount());
+      
+      isInitialized.current = true;
     }
+  }, [config]);
 
-    isConnectingRef.current = true;
-    setConnectionState(prev => ({ ...prev, isConnecting: true, error: null }));
-
-    try {
-      console.log('Starting SignalR connection...', { auctionId, auctionCarId });
-
-      // Disconnect existing connections first
-      await disconnect();
-
-      // Connect to Auction Hub
-      const auctionConnection = new signalR.HubConnectionBuilder()
-        .withUrl(`${config.baseUrl}/auctionHub`, {
-          accessTokenFactory: () => {
-            console.log('Getting token for SignalR:', config.token ? 'Token available' : 'No token');
-            return config.token;
-          },
-          transport: signalR.HttpTransportType.WebSockets
-        })
-        .withAutomaticReconnect({
-          nextRetryDelayInMilliseconds: (retryContext) => {
-            if (retryContext.previousRetryCount < 3) {
-              return 2000; // 2 seconds
-            } else if (retryContext.previousRetryCount < 10) {
-              return 10000; // 10 seconds
-            } else {
-              return 30000; // 30 seconds
-            }
-          }
-        })
-        .configureLogging(signalR.LogLevel.Information)
-        .build();
-
-      // Connect to Bid Hub
-      const bidConnection = new signalR.HubConnectionBuilder()
-        .withUrl(`${config.baseUrl}/bidHub`, {
-          accessTokenFactory: () => {
-            console.log('Getting token for BidHub:', config.token ? 'Token available' : 'No token');
-            return config.token;
-          },
-          transport: signalR.HttpTransportType.WebSockets
-        })
-        .withAutomaticReconnect({
-          nextRetryDelayInMilliseconds: (retryContext) => {
-            if (retryContext.previousRetryCount < 3) {
-              return 2000;
-            } else if (retryContext.previousRetryCount < 10) {
-              return 10000;
-            } else {
-              return 30000;
-            }
-          }
-        })
-        .configureLogging(signalR.LogLevel.Information)
-        .build();
-
-      // Set up event handlers for Auction Hub
-      auctionConnection.on('AuctionStarted', events.onAuctionStarted);
-      auctionConnection.on('AuctionStopped', events.onAuctionStopped);
-      auctionConnection.on('AuctionEnded', events.onAuctionEnded);
-      auctionConnection.on('AuctionExtended', events.onAuctionExtended);
-      auctionConnection.on('CarMoved', events.onCarMoved);
-      auctionConnection.on('TimerTick', events.onTimerTick);
-      auctionConnection.on('AuctionTimerReset', events.onAuctionTimerReset);
-
-      // Set up event handlers for Bid Hub
-      bidConnection.on('BidPlaced', events.onBidPlaced);
-      bidConnection.on('PriceUpdated', events.onPriceUpdated);
-      bidConnection.on('NewLiveBid', events.onNewLiveBid);
-      bidConnection.on('PreBidPlaced', events.onPreBidPlaced);
-      bidConnection.on('HighestBidUpdated', events.onHighestBidUpdated);
-
-      // Handle connection state changes
-      auctionConnection.onclose((error) => {
-        console.log('AuctionHub connection closed:', error);
-        if (error) {
-          setConnectionState(prev => ({ 
-            ...prev, 
-            isConnected: false, 
-            isConnecting: false,
-            error: error.message 
-          }));
-        }
+  // Auto-connect if enabled
+  useEffect(() => {
+    if (config.autoConnect && isInitialized.current) {
+      manager.current.connect().catch(error => {
+        console.error('Auto-connect failed:', error);
       });
-
-      bidConnection.onclose((error) => {
-        console.log('BidHub connection closed:', error);
-        if (error) {
-          setConnectionState(prev => ({ 
-            ...prev, 
-            isConnected: false, 
-            isConnecting: false,
-            error: error.message 
-          }));
-        }
-      });
-
-      // Start connections with retry logic
-      console.log('Starting AuctionHub connection...');
-      await auctionConnection.start();
-      console.log('AuctionHub connected successfully');
-
-      console.log('Starting BidHub connection...');
-      await bidConnection.start();
-      console.log('BidHub connected successfully');
-
-      // Join auction room - AuctionHub.JoinAuction(auctionId)
-      console.log('Joining auction:', auctionId);
-      await auctionConnection.invoke('JoinAuction', auctionId);
-      console.log('Successfully joined auction:', auctionId);
-      
-      // Join auction car room - BidHub.JoinAuctionCar(auctionCarId)
-      if (auctionCarId) {
-        console.log('Joining auction car:', auctionCarId);
-        await bidConnection.invoke('JoinAuctionCar', auctionCarId);
-        console.log('Successfully joined auction car:', auctionCarId);
-      }
-
-      auctionHubRef.current = auctionConnection;
-      bidHubRef.current = bidConnection;
-
-      setConnectionState({
-        isConnected: true,
-        isConnecting: false,
-        isReconnecting: false,
-        error: null
-      });
-
-      retryCountRef.current = 0; // Reset retry count on successful connection
-      console.log('SignalR connection established successfully');
-
-    } catch (error) {
-      console.error('SignalR connection failed:', error);
-      
-      const errorMessage = error instanceof Error ? error.message : 'Connection failed';
-      
-      // Check if it's a connection refused error
-      if (errorMessage.includes('ERR_CONNECTION_REFUSED') || errorMessage.includes('Failed to fetch')) {
-        retryCountRef.current++;
-        
-        if (retryCountRef.current < maxRetries) {
-          const delay = Math.pow(2, retryCountRef.current) * 1000; // Exponential backoff
-          console.log(`Connection failed, retrying in ${delay}ms (attempt ${retryCountRef.current}/${maxRetries})`);
-          
-          setTimeout(() => {
-            isConnectingRef.current = false;
-            connect(auctionId, auctionCarId);
-          }, delay);
-          
-          return;
-        }
-      }
-      
-      setConnectionState(prev => ({
-        ...prev,
-        isConnected: false,
-        isConnecting: false,
-        error: errorMessage
-      }));
-    } finally {
-      isConnectingRef.current = false;
     }
-  };
+  }, [config.autoConnect]);
 
-  const disconnect = async () => {
-    console.log('Disconnecting SignalR...');
-    
-    try {
-      if (auctionHubRef.current) {
-        console.log('Stopping AuctionHub...');
-        await auctionHubRef.current.stop();
-        auctionHubRef.current = null;
-      }
-    } catch (error) {
-      console.error('Error stopping AuctionHub:', error);
-    }
-    
-    try {
-      if (bidHubRef.current) {
-        console.log('Stopping BidHub...');
-        await bidHubRef.current.stop();
-        bidHubRef.current = null;
-      }
-    } catch (error) {
-      console.error('Error stopping BidHub:', error);
-    }
-    
-    isConnectingRef.current = false;
-    setConnectionState({
-      isConnected: false,
-      isConnecting: false,
-      isReconnecting: false,
-      error: null
-    });
-    
-    console.log('SignalR disconnected');
-  };
-
-  const sendBid = async (auctionCarId: string, amount: number, isProxy = false) => {
-    if (bidHubRef.current && connectionState.isConnected) {
-      try {
-        await bidHubRef.current.invoke('PlaceBid', {
-          auctionCarId,
-          amount,
-          isProxy
-        });
-      } catch (error) {
-        console.error('Failed to send bid:', error);
-        throw error;
-      }
-    } else {
-      throw new Error('Not connected to SignalR');
-    }
-  };
-
-  // Bid functionality according to backend logic
-  const placePreBid = async (auctionCarId: string, amount: number) => {
-    if (bidHubRef.current && connectionState.isConnected) {
-      try {
-        await bidHubRef.current.invoke('PlacePreBid', {
-          auctionCarId,
-          amount
-        });
-      } catch (error) {
-        console.error('Failed to place pre-bid:', error);
-        throw error;
-      }
-    } else {
-      throw new Error('Not connected to SignalR');
-    }
-  };
-
-  const placeLiveBid = async (auctionCarId: string, amount: number) => {
-    if (bidHubRef.current && connectionState.isConnected) {
-      try {
-        await bidHubRef.current.invoke('PlaceLiveBid', {
-          auctionCarId,
-          amount
-        });
-      } catch (error) {
-        console.error('Failed to place live bid:', error);
-        throw error;
-      }
-    } else {
-      throw new Error('Not connected to SignalR');
-    }
-  };
-
-  const placeProxyBid = async (auctionCarId: string, maxAmount: number, incrementAmount: number) => {
-    if (bidHubRef.current && connectionState.isConnected) {
-      try {
-        await bidHubRef.current.invoke('PlaceProxyBid', {
-          auctionCarId,
-          maxAmount,
-          incrementAmount
-        });
-      } catch (error) {
-        console.error('Failed to place proxy bid:', error);
-        throw error;
-      }
-    } else {
-      throw new Error('Not connected to SignalR');
-    }
-  };
-
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      disconnect();
+      // Don't destroy the manager here as it's a singleton
+      // Other components might still be using it
     };
   }, []);
 
+  // Connection methods
+  const connect = useCallback(async (): Promise<void> => {
+    await manager.current.connect();
+  }, []);
+
+  const disconnect = useCallback(async (): Promise<void> => {
+    await manager.current.disconnect();
+  }, []);
+
+  const reconnect = useCallback(async (): Promise<void> => {
+    await manager.current.reconnect();
+  }, []);
+
+  const waitForConnection = useCallback(async (timeoutMs?: number): Promise<boolean> => {
+    return await manager.current.waitForConnection(timeoutMs);
+  }, []);
+
+  const waitForState = useCallback(async (targetState: ConnectionState, timeoutMs?: number): Promise<boolean> => {
+    return await manager.current.waitForState(targetState, timeoutMs);
+  }, []);
+
+  // Group management
+  const joinGroup = useCallback(async (groupName: string, hubType: 'auction' | 'bid' = 'auction'): Promise<void> => {
+    await manager.current.joinGroup(groupName, hubType);
+  }, []);
+
+  const leaveGroup = useCallback(async (groupName: string, hubType: 'auction' | 'bid' = 'auction'): Promise<void> => {
+    await manager.current.leaveGroup(groupName, hubType);
+  }, []);
+
+  // Hub method calls
+  const invoke = useCallback(async (methodName: string, ...args: any[]): Promise<any> => {
+    return await manager.current.invoke(methodName, ...args);
+  }, []);
+
+  // Convenience methods
+  const joinAuction = useCallback(async (auctionId: string): Promise<void> => {
+    await manager.current.joinGroup(auctionId, 'auction');
+  }, []);
+
+  const leaveAuction = useCallback(async (auctionId: string): Promise<void> => {
+    await manager.current.leaveGroup(auctionId, 'auction');
+  }, []);
+
+  const joinAuctionCar = useCallback(async (auctionCarId: string): Promise<void> => {
+    await manager.current.joinGroup(auctionCarId, 'bid');
+  }, []);
+
+  const leaveAuctionCar = useCallback(async (auctionCarId: string): Promise<void> => {
+    await manager.current.leaveGroup(auctionCarId, 'bid');
+  }, []);
+
+  // Bidding methods
+  const placeLiveBid = useCallback(async (auctionCarId: string, amount: number): Promise<boolean> => {
+    try {
+      await manager.current.invoke('PlaceLiveBid', auctionCarId, amount);
+      return true;
+    } catch (error) {
+      console.error('Failed to place live bid:', error);
+      return false;
+    }
+  }, []);
+
+  const placePreBid = useCallback(async (auctionCarId: string, amount: number): Promise<boolean> => {
+    try {
+      await manager.current.invoke('PlacePreBid', auctionCarId, amount);
+      return true;
+    } catch (error) {
+      console.error('Failed to place pre-bid:', error);
+      return false;
+    }
+  }, []);
+
+  const placeProxyBid = useCallback(async (auctionCarId: string, maxAmount: number, startAmount: number): Promise<boolean> => {
+    try {
+      await manager.current.invoke('PlaceProxyBid', auctionCarId, maxAmount, startAmount);
+      return true;
+    } catch (error) {
+      console.error('Failed to place proxy bid:', error);
+      return false;
+    }
+  }, []);
+
+  const cancelProxyBid = useCallback(async (auctionCarId: string): Promise<boolean> => {
+    try {
+      await manager.current.invoke('CancelProxyBid', auctionCarId);
+      return true;
+    } catch (error) {
+      console.error('Failed to cancel proxy bid:', error);
+      return false;
+    }
+  }, []);
+
+  // Computed properties
+  const isConnected = connectionState === ConnectionState.Connected;
+  const isConnecting = connectionState === ConnectionState.Connecting;
+  const isReconnecting = connectionState === ConnectionState.Reconnecting;
+  const isFailed = connectionState === ConnectionState.Failed;
+
   return {
-    ...connectionState,
+    // Connection state
+    connectionState,
+    isConnected,
+    isConnecting,
+    isReconnecting,
+    isFailed,
+    lastError,
+    retryCount,
+    
+    // Connection methods
     connect,
     disconnect,
-    sendBid,
-    placePreBid,
+    reconnect,
+    waitForConnection,
+    waitForState,
+    
+    // Group management
+    joinGroup,
+    leaveGroup,
+    
+    // Hub method calls
+    invoke,
+    
+    // Convenience methods
+    joinAuction,
+    leaveAuction,
+    joinAuctionCar,
+    leaveAuctionCar,
+    
+    // Bidding methods
     placeLiveBid,
-    placeProxyBid
+    placePreBid,
+    placeProxyBid,
+    cancelProxyBid
   };
 };
+
+export default useSignalR;

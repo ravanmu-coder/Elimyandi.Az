@@ -8,46 +8,75 @@ namespace AutoriaFinal.Domain.Entities.Auctions
 {
     public class AuctionCar : BaseEntity
     {
+        // ✅ Basic Info
         public Guid AuctionId { get; set; }
         public Guid CarId { get; set; }
-
         public string LotNumber { get; set; } = default!;
         public int? ItemNumber { get; set; }
 
-        public decimal? ReservePrice { get; set; }
-        public decimal? HammerPrice { get; set; }
-        public decimal? SoldPrice { get; set; } // Son satış qiyməti
-
+        // ✅ REAL COPART PRICING LOGIC
+        public decimal StartPrice { get; set; } = 0; // 80% of ERV
+        public decimal? ReservePrice { get; set; }   // 90% of ERV (gizli)
         public decimal CurrentPrice { get; set; } = 0;
+        public decimal? HammerPrice { get; set; }    // Final winning bid
+        public decimal? BuyersPremium { get; set; }  // 10-12% of hammer
+        public decimal? TotalPrice { get; set; }     // Hammer + Premium + Fees
+        public decimal? SoldPrice { get; set; }      // Final amount buyer pays
+
+        // ✅ Bid Management
+        public decimal MinPreBid { get; set; }       // Minimum pre-bid (usually StartPrice)
         public bool IsReserveMet { get; set; }
+        public DateTime? LastBidTime { get; set; }
+        public int BidCount { get; set; } = 0;
+        public int PreBidCount { get; set; } = 0;
 
-        public decimal MinPreBid { get; set; }
-        public DateTime? LastBidTime { get;  set; } // Son bid vaxtı - timer üçün vacibdir
-        public int BidCount { get; set; } = 0;      // Bu maşın üçün bid sayı
-        public bool IsActive { get; set; } = false; // Hal-hazırda auction-da aktivdir
-        public DateTime? ActiveStartTime { get; set; } // Bu maşının auction-da aktiv olduğu vaxt
+        // ✅ Live Auction Status
+        public bool IsActive { get; set; } = false;
+        public DateTime? ActiveStartTime { get; set; }
+        public int? LaneNumber { get; set; }         // Physical lane assignment
+        public int? RunOrder { get; set; }           // Order in lane
+        public DateTime? ScheduledTime { get; set; }  // Approximate auction time
 
+        // ✅ Business Logic Status
+        public AuctionWinnerStatus WinnerStatus { get; set; } = AuctionWinnerStatus.Pending;
+        public AuctionCarCondition AuctionCondition { get; set; } = AuctionCarCondition.PreAuction;
+        public bool RequiresSellerApproval { get; set; } = true; // Seller must approve winner
+
+        // ✅ Post-Auction Process
+        public DateTime? WinnerNotifiedAt { get; set; }
+        public DateTime? DepositPaidAt { get; set; }
+        public DateTime? PaymentDueDate { get; set; }
+        public string? UnsoldReason { get; set; }
+        public string? SellerNotes { get; set; }
+
+        // ✅ Navigation Properties
         public Car Car { get; set; } = default!;
         public Auction Auction { get; set; } = default!;
         public AuctionWinner? AuctionWinner { get; set; }
         public ICollection<Bid> Bids { get; set; } = new List<Bid>();
 
-        public AuctionWinnerStatus WinnerStatus { get; set; } = AuctionWinnerStatus.Pending;
-        public AuctionCar() { } // EF Core üçün
+        public AuctionCar() { } // EF Core
 
+        // ✅ ENHANCED FACTORY METHOD
         public static AuctionCar Create(
             Guid auctionId,
             Guid carId,
             string lotNumber,
-            decimal minPreBid,
-            decimal? reservePrice = null,
-            int? itemNumber = null)
+            decimal estimatedRetailValue,
+            int? itemNumber = null,
+            int? laneNumber = null,
+            bool requiresSellerApproval = true)
         {
             if (string.IsNullOrWhiteSpace(lotNumber))
                 throw new ArgumentException("Lot nömrəsi boş ola bilməz", nameof(lotNumber));
 
-            if (minPreBid <= 0)
-                throw new ArgumentException("Minimum pre-bid sıfırdan böyük olmalıdır", nameof(minPreBid));
+            if (estimatedRetailValue <= 0)
+                throw new ArgumentException("ERV sıfırdan böyük olmalıdır", nameof(estimatedRetailValue));
+
+            // ✅ REAL PRICING CALCULATION
+            var startPrice = Math.Round(estimatedRetailValue * 0.80m, 2); // 80% of ERV
+            var reservePrice = Math.Round(estimatedRetailValue * 0.90m, 2); // 90% of ERV
+            var minPreBid = startPrice; // Pre-bid StartPrice-dan başlayır
 
             return new AuctionCar
             {
@@ -55,55 +84,60 @@ namespace AutoriaFinal.Domain.Entities.Auctions
                 AuctionId = auctionId,
                 CarId = carId,
                 LotNumber = lotNumber,
-                MinPreBid = minPreBid,
-                ReservePrice = reservePrice,
                 ItemNumber = itemNumber,
+                StartPrice = startPrice,
+                ReservePrice = reservePrice,
+                MinPreBid = minPreBid,
+                CurrentPrice = startPrice, // Start with StartPrice
+                LaneNumber = laneNumber,
+                RequiresSellerApproval = requiresSellerApproval,
+                AuctionCondition = AuctionCarCondition.PreAuction,
+                PaymentDueDate = DateTime.UtcNow.AddDays(7), // 7 days to pay
                 CreatedAt = DateTime.UtcNow
             };
         }
 
-        public void SetReserve(decimal? reserve)
+        // ✅ BUSINESS LOGIC METHODS
+
+        public void SetPricing(decimal estimatedRetailValue)
         {
-            if (reserve.HasValue && reserve.Value < 0)
-                throw new InvalidOperationException("Reserve price mənfi ola bilməz.");
+            if (estimatedRetailValue <= 0)
+                throw new InvalidOperationException("ERV sıfırdan böyük olmalıdır");
 
-            ReservePrice = reserve;
-            MarkUpdated();
-        }
-
-        public void SetHammer(decimal amount)
-        {
-            if (amount <= 0)
-                throw new InvalidOperationException("Hammer price sıfırdan böyük olmalıdır.");
-
-            HammerPrice = amount;
-            SoldPrice = amount; // Sold price də eyni vaxtda təyin edilir
+            StartPrice = Math.Round(estimatedRetailValue * 0.80m, 2);
+            ReservePrice = Math.Round(estimatedRetailValue * 0.90m, 2);
+            MinPreBid = StartPrice;
+            CurrentPrice = StartPrice;
             MarkUpdated();
         }
 
         public void UpdateCurrentPrice(decimal bidAmount)
         {
-            if (bidAmount <= CurrentPrice)
-                throw new InvalidOperationException("Yeni qiymət mövcud qiymətdən böyük olmalıdır.");
+            if (bidAmount < CurrentPrice)
+                throw new InvalidOperationException("Bid cari qiymətdən aşağı ola bilməz");
 
+            var previousPrice = CurrentPrice;
             CurrentPrice = bidAmount;
-            LastBidTime = DateTime.UtcNow; //  Son bid vaxtını yenilə
-            BidCount++; //  Bid sayını artır
+            LastBidTime = DateTime.UtcNow;
+            BidCount++;
 
+            // Reserve check
             if (ReservePrice.HasValue && CurrentPrice >= ReservePrice.Value)
+            {
                 IsReserveMet = true;
+            }
 
             MarkUpdated();
         }
 
-        public void MarkAsActive()
+        public void MarkAsActive(int timerSeconds = 10)
         {
             IsActive = true;
             ActiveStartTime = DateTime.UtcNow;
+            AuctionCondition = AuctionCarCondition.LiveAuction;
             MarkUpdated();
         }
 
-        // Bu maşını auction-da qeyri-aktiv et
         public void MarkAsInactive()
         {
             IsActive = false;
@@ -111,93 +145,114 @@ namespace AutoriaFinal.Domain.Entities.Auctions
             MarkUpdated();
         }
 
-        public void SetWinner(AuctionWinnerStatus status)
+        public void MarkWon(decimal winningBid, decimal buyersPremiumRate = 0.10m)
         {
-            if (status == AuctionWinnerStatus.None)
-                throw new InvalidOperationException("Winner 'None' olaraq təyin edilə bilməz.");
+            if (winningBid <= 0)
+                throw new InvalidOperationException("Winning bid sıfırdan böyük olmalıdır");
 
-            if (WinnerStatus == AuctionWinnerStatus.Completed ||
-                WinnerStatus == AuctionWinnerStatus.PaymentFailed ||
-                WinnerStatus == AuctionWinnerStatus.Rejected)
-            {
-                throw new InvalidOperationException("AuctionCar artıq yekunlaşıb, qalib dəyişdirilə bilməz.");
-            }
+            HammerPrice = winningBid;
+            BuyersPremium = Math.Round(winningBid * buyersPremiumRate, 2);
+            TotalPrice = HammerPrice + BuyersPremium;
+            SoldPrice = TotalPrice;
 
-            WinnerStatus = status;
+            UpdateCurrentPrice(winningBid);
+            WinnerStatus = RequiresSellerApproval ? AuctionWinnerStatus.AwaitingSellerApproval : AuctionWinnerStatus.Won;
+            AuctionCondition = AuctionCarCondition.Sold;
+            WinnerNotifiedAt = DateTime.UtcNow;
+
+            MarkAsInactive();
             MarkUpdated();
         }
 
-        public void MarkUnsold()
+        public void MarkUnsold(string reason = "Reserve not met")
         {
-            SetWinner(AuctionWinnerStatus.Unsold);
-            MarkAsInactive(); //  Satılmayan maşın qeyri-aktiv olur
+            WinnerStatus = AuctionWinnerStatus.Unsold;
+            AuctionCondition = AuctionCarCondition.Unsold;
+            UnsoldReason = reason;
+            MarkAsInactive();
+            MarkUpdated();
         }
 
-        public void MarkWon(decimal winningBid)
+        public void ApproveWinner()
         {
-            if (winningBid <= 0)
-                throw new InvalidOperationException("Qalib bid sıfırdan böyük olmalıdır.");
+            if (WinnerStatus != AuctionWinnerStatus.AwaitingSellerApproval)
+                throw new InvalidOperationException("Seller approval yalnız AwaitingSellerApproval statusunda edilə bilər");
 
-            UpdateCurrentPrice(winningBid);
-            SetHammer(winningBid);
-            SetWinner(AuctionWinnerStatus.Won);
-            MarkAsInactive(); //  Qazanan maşın qeyri-aktiv olur
+            WinnerStatus = AuctionWinnerStatus.SellerApproved;
+            AuctionCondition = AuctionCarCondition.AwaitingPayment;
+            MarkUpdated();
         }
 
-        public void ConfirmWinner()
+        public void RejectWinner(string reason)
         {
-            if (WinnerStatus != AuctionWinnerStatus.Won && WinnerStatus != AuctionWinnerStatus.Pending)
-                throw new InvalidOperationException("Qalib yalnız Won və ya Pending vəziyyətində təsdiqlənə bilər.");
+            if (WinnerStatus != AuctionWinnerStatus.AwaitingSellerApproval)
+                throw new InvalidOperationException("Seller rejection yalnız AwaitingSellerApproval statusunda edilə bilər");
 
-            SetWinner(AuctionWinnerStatus.Confirmed);
+            WinnerStatus = AuctionWinnerStatus.SellerRejected;
+            AuctionCondition = AuctionCarCondition.Unsold;
+            UnsoldReason = reason;
+            MarkUpdated();
         }
 
-        public void MarkPaymentFailed()
+        public void MarkDepositPaid()
         {
-            if (WinnerStatus != AuctionWinnerStatus.Confirmed)
-                throw new InvalidOperationException("Ödəniş yalnız təsdiqlənmiş qalib üçün uğursuz ola bilər.");
+            if (WinnerStatus != AuctionWinnerStatus.SellerApproved)
+                throw new InvalidOperationException("Deposit yalnız SellerApproved statusunda ödənə bilər");
 
-            SetWinner(AuctionWinnerStatus.PaymentFailed);
+            WinnerStatus = AuctionWinnerStatus.DepositPaid;
+            AuctionCondition = AuctionCarCondition.AwaitingFullPayment;
+            DepositPaidAt = DateTime.UtcNow;
+            MarkUpdated();
+        }
+
+        public void CompletePayment()
+        {
+            if (WinnerStatus != AuctionWinnerStatus.DepositPaid)
+                throw new InvalidOperationException("Full payment yalnız DepositPaid statusunda edilə bilər");
+
+            WinnerStatus = AuctionWinnerStatus.PaymentComplete;
+            AuctionCondition = AuctionCarCondition.ReadyForPickup;
+            MarkUpdated();
         }
 
         public void CompleteSale()
         {
-            if (WinnerStatus != AuctionWinnerStatus.Confirmed)
-                throw new InvalidOperationException("Yalnız təsdiqlənmiş qalib Completed vəziyyətinə keçə bilər.");
+            if (WinnerStatus != AuctionWinnerStatus.PaymentComplete)
+                throw new InvalidOperationException("Sale yalnız PaymentComplete statusunda complete edilə bilər");
 
-            SetWinner(AuctionWinnerStatus.Completed);
+            WinnerStatus = AuctionWinnerStatus.Completed;
+            AuctionCondition = AuctionCarCondition.Completed;
+            MarkUpdated();
         }
 
-        //  Bu maşının auction vaxtının bitib-bitmədiyini yoxlamaq
+        // ✅ TIMER LOGIC
         public bool IsTimeExpired(int timerSeconds)
         {
-            if (!LastBidTime.HasValue)
-                return ActiveStartTime.HasValue &&
-                       (DateTime.UtcNow - ActiveStartTime.Value).TotalSeconds >= timerSeconds;
+            if (!IsActive) return false;
 
-            return (DateTime.UtcNow - LastBidTime.Value).TotalSeconds >= timerSeconds;
+            var referenceTime = LastBidTime ?? ActiveStartTime ?? DateTime.UtcNow;
+            return (DateTime.UtcNow - referenceTime).TotalSeconds >= timerSeconds;
         }
 
-        //  Bu maşında pre-bid olub-olmadığını yoxlamaq
-        public bool HasPreBids()
+        public decimal CalculateNextMinimumBid()
         {
-            return Bids.Any(b => b.IsPreBid);
+            var increment = CurrentPrice switch
+            {
+                <= 500 => 25m,
+                <= 1000 => 50m,
+                <= 5000 => 100m,
+                <= 10000 => 250m,
+                _ => 500m
+            };
+            return CurrentPrice + increment;
         }
 
-        //  Ən yüksək pre-bid-i almaq
-        public Bid? GetHighestPreBid()
-        {
-            return Bids.Where(b => b.IsPreBid)
-                      .OrderByDescending(b => b.Amount)
-                      .FirstOrDefault();
-        }
-
-        //  Ən yüksək bid-i almaq
-        public Bid? GetHighestBid()
-        {
-            return Bids.OrderByDescending(b => b.Amount)
-                      .FirstOrDefault();
-        }
-       
+        public bool HasPreBids() => Bids.Any(b => b.IsPreBid);
+        public bool HasValidBids() => Bids.Any(b => !b.IsPreBid && b.Status == BidStatus.Placed);
+        public Bid? GetHighestPreBid() => Bids.Where(b => b.IsPreBid).OrderByDescending(b => b.Amount).FirstOrDefault();
+        public Bid? GetHighestBid() => Bids.OrderByDescending(b => b.Amount).FirstOrDefault();
+        public bool CanStartAuction() => HasPreBids() || StartPrice > 0;
+        public bool IsPaymentOverdue() => PaymentDueDate.HasValue && DateTime.UtcNow > PaymentDueDate.Value;
+        public decimal GetTotalAmountDue() => TotalPrice ?? HammerPrice ?? CurrentPrice;
     }
 }

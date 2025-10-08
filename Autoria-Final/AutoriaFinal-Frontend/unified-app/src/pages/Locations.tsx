@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, MapPin, Phone, Clock, ArrowRight } from 'lucide-react';
 import { locationApi, LocationDetails } from '../api/locations';
-import { useLanguage } from '../hooks/useLanguage';
+import { useTranslation } from 'react-i18next';
 
 export default function Locations() {
-  const { t } = useLanguage();
+  const { t } = useTranslation();
   const [locations, setLocations] = useState<LocationDetails[]>([]);
   const [filteredLocations, setFilteredLocations] = useState<LocationDetails[]>([]);
   const [searchQuery, setSearchQuery] = useState('');

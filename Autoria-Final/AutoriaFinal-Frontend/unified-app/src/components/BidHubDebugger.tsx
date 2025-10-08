@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useBidHub } from '../hooks/useBidHub';
+import { useSignalR } from '../hooks/useSignalR';
 
 interface BidHubDebuggerProps {
   onClose: () => void;
@@ -13,28 +13,36 @@ export const BidHubDebugger: React.FC<BidHubDebuggerProps> = ({ onClose }) => {
   };
 
   const { 
-    connectionState, 
+    connectionState,
+    isConnected,
+    isConnecting,
+    isFailed,
+    lastError,
+    retryCount,
     connect, 
     disconnect, 
-    testConnection 
-  } = useBidHub(
-    {
-      baseUrl: 'https://localhost:7249',
-      token: localStorage.getItem('authToken') || localStorage.getItem('auth_token') || ''
-    },
-    {
-      onJoinedAuctionCar: (data) => addTestResult(`Joined auction car: ${JSON.stringify(data)}`),
+    reconnect,
+    joinAuctionCar,
+    leaveAuctionCar,
+    placeLiveBid,
+    placePreBid,
+    placeProxyBid,
+    cancelProxyBid
+  } = useSignalR({
+    baseUrl: 'https://localhost:7249',
+    token: localStorage.getItem('authToken') || localStorage.getItem('auth_token') || '',
+    autoConnect: false,
+    events: {
       onNewLiveBid: (data) => addTestResult(`New live bid: ${JSON.stringify(data)}`),
       onPreBidPlaced: (data) => addTestResult(`Pre-bid placed: ${JSON.stringify(data)}`),
       onHighestBidUpdated: (data) => addTestResult(`Highest bid updated: ${JSON.stringify(data)}`),
       onAuctionTimerReset: (data) => addTestResult(`Timer reset: ${JSON.stringify(data)}`),
       onBidStatsUpdated: (data) => addTestResult(`Stats updated: ${JSON.stringify(data)}`),
-      onBidValidationError: (data) => addTestResult(`Validation error: ${JSON.stringify(data)}`),
       onBidError: (error) => addTestResult(`Bid error: ${error}`),
-      onConnectionStateChanged: (isConnected, error) => 
-        addTestResult(`Connection state: ${isConnected ? 'Connected' : 'Disconnected'}${error ? ` - ${error}` : ''}`)
+      onConnectionStateChanged: (state, error) => 
+        addTestResult(`Connection state: ${state}${error ? ` - ${error}` : ''}`)
     }
-  );
+  });
 
   const runConnectionTest = async () => {
     addTestResult('Starting connection test...');

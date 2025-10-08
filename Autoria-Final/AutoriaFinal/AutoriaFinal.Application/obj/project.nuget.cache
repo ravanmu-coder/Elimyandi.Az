@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "+LnmDK/rWSc=",
+  "dgSpecHash": "29hGYAtUSgI=",
   "success": true,
-  "projectFilePath": "C:\\Users\\Ravan\\Desktop\\AutotiaFinalProject\\Autoria-Final\\AutoriaFinal\\AutoriaFinal.Application\\AutoriaFinal.Application.csproj",
+  "projectFilePath": "C:\\Users\\Ravan\\Desktop\\AutotiaFinalProject\\Elimyandi.Az\\Autoria-Final\\AutoriaFinal\\AutoriaFinal.Application\\AutoriaFinal.Application.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Ravan\\.nuget\\packages\\automapper\\15.0.1\\automapper.15.0.1.nupkg.sha512",
     "C:\\Users\\Ravan\\.nuget\\packages\\azure.core\\1.38.0\\azure.core.1.38.0.nupkg.sha512",
@@ -22,6 +22,7 @@
     "C:\\Users\\Ravan\\.nuget\\packages\\grpc.core.api\\2.71.0\\grpc.core.api.2.71.0.nupkg.sha512",
     "C:\\Users\\Ravan\\.nuget\\packages\\grpc.net.client\\2.71.0\\grpc.net.client.2.71.0.nupkg.sha512",
     "C:\\Users\\Ravan\\.nuget\\packages\\grpc.net.common\\2.71.0\\grpc.net.common.2.71.0.nupkg.sha512",
+    "C:\\Users\\Ravan\\.nuget\\packages\\microsoft.aspnetcore.authentication.google\\8.0.19\\microsoft.aspnetcore.authentication.google.8.0.19.nupkg.sha512",
     "C:\\Users\\Ravan\\.nuget\\packages\\microsoft.aspnetcore.authentication.jwtbearer\\8.0.19\\microsoft.aspnetcore.authentication.jwtbearer.8.0.19.nupkg.sha512",
     "C:\\Users\\Ravan\\.nuget\\packages\\microsoft.aspnetcore.cryptography.internal\\8.0.19\\microsoft.aspnetcore.cryptography.internal.8.0.19.nupkg.sha512",
     "C:\\Users\\Ravan\\.nuget\\packages\\microsoft.aspnetcore.cryptography.keyderivation\\8.0.19\\microsoft.aspnetcore.cryptography.keyderivation.8.0.19.nupkg.sha512",

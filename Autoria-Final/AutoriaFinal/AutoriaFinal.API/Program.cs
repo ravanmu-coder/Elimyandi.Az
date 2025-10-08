@@ -110,12 +110,23 @@ namespace AutoriaFinal.API
             builder.Services.Configure<EmailSettings>(
                 builder.Configuration.GetSection("Email"));
             builder.Services.AddInfrastructureServices();
-
+            
             builder.Services.Configure<AuctionSchedulerOptions>(
-               builder.Configuration.GetSection("AuctionScheduler"));
+    builder.Configuration.GetSection("AuctionScheduler"));
 
             // Register the background scheduler service (it will start with the app)
             builder.Services.AddHostedService<AuctionSchedulerService>();
+            builder.Services.AddLogging(logging =>
+            {
+                if (builder.Environment.IsDevelopment())
+                {
+                    logging.AddConsole(options =>
+                    {
+                        options.IncludeScopes = true;
+                        options.TimestampFormat = "yyyy-MM-dd HH:mm:ss.fff ";
+                    });
+                }
+            });
 
             // ✅ Identity
             builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>

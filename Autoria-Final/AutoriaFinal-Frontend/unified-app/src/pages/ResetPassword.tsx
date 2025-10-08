@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../lib/api';
-import { useLanguage } from '../hooks/useLanguage.tsx';
+import { useTranslation } from 'react-i18next';
 import { Lock, Eye, EyeOff, ArrowRight, CheckCircle, AlertCircle, Loader2, Globe } from 'lucide-react';
 
 export default function ResetPassword() {
@@ -14,7 +14,7 @@ export default function ResetPassword() {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { language, setLanguage, t } = useLanguage();
+  const { t, i18n } = useTranslation();
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,8 +49,8 @@ export default function ResetPassword() {
         <div className="mb-4 flex justify-end">
           <div className="relative">
             <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value as 'az' | 'en')}
+              value={i18n.language}
+              onChange={(e) => i18n.changeLanguage(e.target.value as 'az' | 'en')}
               className="bg-white/25 border border-white/40 rounded-lg px-3 py-1.5 text-white text-sm focus:bg-white/35 focus:border-blue-400 focus:outline-none transition-all duration-300 shadow-lg appearance-none pr-8"
             >
               <option value="az" className="bg-slate-800 text-white">{t('language.azerbaijani')}</option>

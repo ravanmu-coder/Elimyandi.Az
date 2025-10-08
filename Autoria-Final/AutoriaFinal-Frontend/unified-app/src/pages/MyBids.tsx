@@ -244,7 +244,7 @@ const BidRow: React.FC<BidRowProps> = ({ bid, onRefreshVehicle }) => {
             </button>
             {auction && auctionApi.isAuctionRunning(auction) && (
               <button
-                onClick={() => navigate(`/auctions/${auction.id}`)}
+                onClick={() => navigate(`/auctions/${auction.id}/join`)}
                 className="inline-flex items-center px-4 py-2 bg-green-600/80 text-white text-sm rounded-lg hover:bg-green-600 transition-colors font-medium"
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
@@ -552,7 +552,7 @@ export default function MyBids() {
                   }
                 </p>
                 <Link
-                  to="/auctions"
+                  to="/all-auctions"
                   className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                 >
                   <Search className="w-4 h-4 mr-2" />

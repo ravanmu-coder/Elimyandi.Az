@@ -1,8 +1,9 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth.tsx';
-import { useLanguage } from '../hooks/useLanguage.tsx';
+import { useTranslation } from 'react-i18next';
 import FooterLanguageSelector from './FooterLanguageSelector';
+import ConnectionStatus from './ConnectionStatus';
 import {
   User,
   Menu,
@@ -22,7 +23,7 @@ import Flag from 'react-world-flags';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout, isAuthenticated } = useAuth();
-  const { language, setLanguage, t } = useLanguage();
+  const { t, i18n } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -76,7 +77,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const handleLanguageChange = (newLanguage: 'az' | 'en') => {
-    setLanguage(newLanguage);
+    i18n.changeLanguage(newLanguage);
     setIsLanguageDropdownOpen(false);
   };
 
@@ -142,8 +143,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 {/* Language Selector */}
                 <div className="relative">
                   <select
-                    value={language}
-                    onChange={(e) => setLanguage(e.target.value as 'az' | 'en')}
+                    value={i18n.language}
+                    onChange={(e) => i18n.changeLanguage(e.target.value as 'az' | 'en')}
                     className="bg-white/25 border border-white/40 rounded-lg px-3 py-1.5 text-white text-sm focus:bg-white/35 focus:border-blue-400 focus:outline-none transition-all duration-300 shadow-lg"
                   >
                     <option value="az" className="bg-slate-800 text-white">{t('language.azerbaijani')}</option>
@@ -228,12 +229,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                         <Link to="/auctions/calendar" className="block px-4 py-2.5 text-sm text-white hover:bg-white/15 hover:text-blue-200 transition-colors duration-300">
                           {t('dropdown.auctionsCalendar')}
                         </Link>
-                        <Link to="/auctions/join" className="block px-4 py-2.5 text-sm text-white hover:bg-white/15 hover:text-blue-200 transition-colors duration-300">
-                          {t('dropdown.joinAuction')}
+                        <Link to="/all-auctions" className="block px-4 py-2.5 text-sm text-white hover:bg-white/15 hover:text-blue-200 transition-colors duration-300">
+                          {t('dropdown.AllAuctions')}
                         </Link>
-                        <Link to="/demo-join" className="block px-4 py-2.5 text-sm text-white hover:bg-white/15 hover:text-blue-200 transition-colors duration-300">
-                          Demo Join Auction
-                        </Link>
+                       
                       </div>
                     </div>
                   )}
@@ -287,6 +286,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Main Content */}
         <main className="flex-1">
+          {/* Connection Status */}
+          <div className="bg-white/10 backdrop-blur-sm border-b border-white/20">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+              <ConnectionStatus showDetails={false} />
+            </div>
+          </div>
           {children}
         </main>
 
@@ -303,8 +308,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <span className="text-xl font-bold text-white">{t('nav.logo')}</span>
                 </div>
                 <FooterLanguageSelector 
-                  currentLanguage={language}
-                  onLanguageChange={setLanguage}
+                  currentLanguage={i18n.language as 'az' | 'en'}
+                  onLanguageChange={(lang) => i18n.changeLanguage(lang)}
                 />
               </div>
 
@@ -334,8 +339,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <Link to="/auctions/calendar" className="block text-white/75 hover:text-blue-200 transition-colors duration-300 text-sm">
                     {t('footer.auctionsCalendar')}
                   </Link>
-                  <Link to="/auctions/join" className="block text-white/75 hover:text-blue-200 transition-colors duration-300 text-sm">
-                    {t('footer.joinAuction')}
+                  <Link to="/all-auctions" className="block text-white/75 hover:text-blue-200 transition-colors duration-300 text-sm">
+                    {t('dropdown.AllAuctions')}
                   </Link>
                   <Link to="/auctions/night" className="block text-white/75 hover:text-blue-200 transition-colors duration-300 text-sm">
                     {t('footer.nightSales')}
@@ -470,9 +475,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 onMouseLeave={handleLanguageMouseLeave}
               >
                 <button className="flex items-center space-x-2 text-slate-300 hover:text-white hover:shadow-[inset_0_0_20px_rgba(59,130,246,0.2)] rounded-lg px-3 py-2 transition-all duration-300 ease-in-out hover:bg-white/5">
-                  <Flag code={language === 'az' ? 'AZ' : 'GB'} className="w-5 h-4 rounded-sm" />
+                  <Flag code={i18n.language === 'az' ? 'AZ' : 'GB'} className="w-5 h-4 rounded-sm" />
                   <span className="text-sm font-medium">
-                    {language === 'az' ? 'Azərbaycan' : 'English'}
+                    {i18n.language === 'az' ? 'Azərbaycan' : 'English'}
                   </span>
                   <ChevronDown 
                     className={`h-4 w-4 transition-transform duration-200 ${
@@ -503,7 +508,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   >
                     <Flag code="AZ" className="w-5 h-4 rounded-sm mr-3" />
                     <span className="flex-1">Azərbaycan</span>
-                    {language === 'az' && <Check className="h-4 w-4 text-blue-400" />}
+                    {i18n.language === 'az' && <Check className="h-4 w-4 text-blue-400" />}
                   </button>
                   <div 
                     className="border-t border-blue-400/30"
@@ -515,7 +520,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   >
                     <Flag code="GB" className="w-5 h-4 rounded-sm mr-3" />
                     <span className="flex-1">English</span>
-                    {language === 'en' && <Check className="h-4 w-4 text-blue-400" />}
+                    {i18n.language === 'en' && <Check className="h-4 w-4 text-blue-400" />}
                   </button>
                 </div>
               </div>
@@ -658,8 +663,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     <Link to="/auctions/calendar" className="block px-4 py-3 text-sm text-slate-300 hover:text-white transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-blue-600/20 hover:to-blue-500/10 relative group rounded-xl mx-2">
                       {t('dropdown.auctionsCalendar')}
                     </Link>
-                    <Link to="/auctions/join" className="block px-4 py-3 text-sm text-slate-300 hover:text-white transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-blue-600/20 hover:to-blue-500/10 relative group rounded-xl mx-2">
-                      {t('dropdown.joinAuction')}
+                    <Link to="/all-auctions" className="block px-4 py-3 text-sm text-slate-300 hover:text-white transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-blue-600/20 hover:to-blue-500/10 relative group rounded-xl mx-2">
+                      {t('dropdown.AllAuctions')}
                     </Link>
                   </div>
                 </div>
@@ -780,8 +785,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </div>
                 <div className="relative">
                   <FooterLanguageSelector
-                    currentLanguage={language}
-                    onLanguageChange={setLanguage}
+                    currentLanguage={i18n.language as 'az' | 'en'}
+                    onLanguageChange={(lang) => i18n.changeLanguage(lang)}
                   />
                 </div>
               </div>
@@ -817,9 +822,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <span className="absolute left-0 top-1/2 transform -translate-y-1/2 w-2 h-2 bg-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300"></span>
                   {t('footer.auctionsCalendar')}
                 </Link>
-                <Link to="/auctions/join" className="block text-slate-300 hover:text-white transition-all duration-300 text-sm relative group pl-4">
+                <Link to="/all-auctions" className="block text-slate-300 hover:text-white transition-all duration-300 text-sm relative group pl-4">
                   <span className="absolute left-0 top-1/2 transform -translate-y-1/2 w-2 h-2 bg-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300"></span>
-                  {t('footer.joinAuction')}
+                  {t('dropdown.AllAuctions')}
                 </Link>
                 <Link to="/auctions/night" className="block text-slate-300 hover:text-white transition-all duration-300 text-sm relative group pl-4">
                   <span className="absolute left-0 top-1/2 transform -translate-y-1/2 w-2 h-2 bg-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300"></span>

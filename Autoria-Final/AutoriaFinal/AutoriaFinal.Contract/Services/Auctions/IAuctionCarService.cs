@@ -4,8 +4,6 @@ using AutoriaFinal.Domain.Entities.Auctions;
 using AutoriaFinal.Domain.Enums.AuctionEnums;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace AutoriaFinal.Contract.Services.Auctions
@@ -17,85 +15,52 @@ namespace AutoriaFinal.Contract.Services.Auctions
         AuctionCarCreateDto,
         AuctionCarUpdateDto>
     {
-        #region AuctionCar LifeCycle
-        /// Copart sistemində maşın auction-a çıxarmaq üçün minimum pre-bid olmalıdır
-        Task<AuctionCarDetailDto> PrepareCarForAuctionAsync(Guid auctionCarId);
-
-        /// Auction-da növbə ilə maşınlar satılır, cari maşını aktiv etmək lazımdır
-        Task<AuctionCarDetailDto> ActivateCarAsync(Guid auctionCarId);
-        /// Timer bitdikdə və ya başqa səbəblə maşının auction-u bitməlidir
+        // Lifecycle Management
+        Task<AuctionCarDetailDto> PrepareCarForAuctionAsync(Guid auctionCarId, Guid currentUserId);
+        Task<AuctionCarDetailDto> ActivateCarAsync(Guid auctionCarId, Guid currentUserId);
         Task<AuctionCarDetailDto> EndCarAuctionAsync(Guid auctionCarId);
-        /// Bid olmazsa və ya reserve price çatılmazsa maşın satılmır
-        Task<AuctionCarDetailDto> MarkCarUnsoldAsync(Guid auctionCarId, string reason);
-#endregion
 
-        #region Pre-Bid Management
-        /// Auction-a qoşulmaq üçün mütləq pre-bid verməli şərti
+        Task<AuctionCarDetailDto> MarkCarUnsoldAsync(Guid auctionCarId, string reason, Guid currentUserId);
+
+        // Pre-Bid Management
         Task<bool> HasRequiredPreBidsAsync(Guid auctionCarId);
-
-        /// Auction bu qiymətlə başlamalıdır
         Task<BidDetailDto?> GetHighestPreBidAsync(Guid auctionCarId);
-
-        /// Pre-bid olmayan istifadəçilər live auction-a qatıla bilmirlər
         Task<bool> HasUserPreBidAsync(Guid auctionCarId, Guid userId);
-
-        /// Pre-bid siyahısını göstərmək və statistika üçün
         Task<IEnumerable<BidGetDto>> GetPreBidsAsync(Guid auctionCarId);
-        #endregion
 
-        #region Price Management
-        /// Cari qiyməti yenilər (yeni bid gəldikdə)
-        Task<AuctionCarDetailDto> UpdateCurrentPriceAsync(Guid auctionCarId, decimal newPrice);
-
-        /// Reserve price-ın çatılub-çatılmadığını yoxlayır
+        // Price Management
+        Task<AuctionCarDetailDto> UpdateCurrentPriceAsync(Guid auctionCarId, decimal newPrice, Guid bidderId);
         Task<bool> IsReservePriceMetAsync(Guid auctionCarId);
-
-        /// Növbəti minimum bid məbləğini hesablayır
         Task<decimal> CalculateNextMinimumBidAsync(Guid auctionCarId);
 
-        /// Hammer price təyin edir (satış qiyməti)
-        Task<AuctionCarDetailDto> SetHammerPriceAsync(Guid auctionCarId, decimal hammerPrice);
-        #endregion
-
-        #region Timer and Status
-        /// Maşının timer məlumatlarını alır
+        // Timer Management
         Task<AuctionCarTimerDto> GetCarTimerInfoAsync(Guid auctionCarId);
-
-        /// Son bid vaxtını yenilər
-        Task UpdateLastBidTimeAsync(Guid auctionCarId, DateTime bidTime);
-
-        /// Maşının timer-ının bitub-bitmədiyini yoxlayır
+        Task UpdateLastBidTimeAsync(Guid auctionCarId, DateTime bidTime, Guid bidderId);
         Task<bool> IsCarTimerExpiredAsync(Guid auctionCarId, int timerSeconds);
-        #endregion
 
-        #region Statistics and Information
-        /// Maşın üçün bid statistikalarını alır
-        Task<BidStatsDto> GetCarBidStatsAsync(Guid auctionCarId);
+        // Post-Auction Management
+        Task<AuctionCarDetailDto> ApproveWinnerAsync(Guid auctionCarId, Guid sellerId, string? approvalNotes = null);
+        Task<AuctionCarDetailDto> RejectWinnerAsync(Guid auctionCarId, Guid sellerId, string rejectionReason);
+        Task<AuctionCarDetailDto> MarkDepositPaidAsync(Guid auctionCarId, decimal depositAmount, Guid buyerId);
+        Task<AuctionCarDetailDto> CompletePaymentAsync(Guid auctionCarId, decimal totalAmount, Guid buyerId);
 
-        /// Maşının tam məlumatlarını alır (bid-lər, winner və s. ilə birlikdə)
-        Task<AuctionCarDetailDto> GetCarWithFullDetailsAsync(Guid auctionCarId);
+        // Lane Management
+        Task<AuctionCarDetailDto> AssignToLaneAsync(Guid auctionCarId, int laneNumber, int runOrder, DateTime scheduledTime, Guid currentUserId);
+        Task<IEnumerable<AuctionCarGetDto>> GetCarsByLaneAsync(int laneNumber, DateTime? scheduleDate = null);
 
-        /// Auction üçün hazır olan maşınları alır (pre-bid-i olanlar)
-        Task<IEnumerable<AuctionCarGetDto>> GetCarsReadyForAuctionAsync(Guid auctionId);
+        // Statistics
+        Task<AuctionCarStatsDto> GetCarBidStatsAsync(Guid auctionCarId);
+        Task<decimal> GetSellThroughRateAsync(Guid auctionId);
 
-        /// Satılmayan maşınları alır
-        Task<IEnumerable<AuctionCarGetDto>> GetUnsoldCarsAsync(Guid auctionId);
-        #endregion
-
-        #region Query and Navigation Methods
-       
-        // Auction-a aid bütün maşınları göstərmək üçün        
-        Task<IEnumerable<AuctionCarGetDto>> GetCarsByAuctionIdAsync(Guid auctionId);
-
-       
-        // URL ilə maşın axtarışı (/lot/LOT001)
-        Task<AuctionCarDetailDto?> GetCarByLotNumberAsync(string lotNumber);
-
-        // Hal-hazırda canlı auction-da olan maşını tapmaq
+        // Query Methods
+        Task<AuctionCarDetailDto> GetCarWithFullDetailsAsync(Guid auctionCarId, Guid? currentUserId = null);
+        Task<IEnumerable<AuctionCarGetDto>> GetCarsByAuctionIdAsync(Guid auctionId, Guid? currentUserId = null);
+        Task<AuctionCarDetailDto?> GetCarByLotNumberAsync(string lotNumber, Guid? currentUserId = null);
         Task<AuctionCarDetailDto?> GetActiveCarForAuctionAsync(Guid auctionId);
-
-        // "Next Car" düyməsi üçün mütləq lazım
         Task<AuctionCarDetailDto?> GetNextCarForAuctionAsync(Guid auctionId, string currentLotNumber);
-        #endregion
+        Task<IEnumerable<AuctionCarGetDto>> GetCarsReadyForAuctionAsync(Guid auctionId);
+        Task<IEnumerable<AuctionCarGetDto>> GetUnsoldCarsAsync(Guid auctionId);
+        Task<IEnumerable<AuctionCarGetDto>> GetCarsAwaitingApprovalAsync(Guid auctionId);
+        Task<IEnumerable<AuctionCarGetDto>> GetUserWonCarsAsync(Guid userId, Guid auctionId);
     }
 }

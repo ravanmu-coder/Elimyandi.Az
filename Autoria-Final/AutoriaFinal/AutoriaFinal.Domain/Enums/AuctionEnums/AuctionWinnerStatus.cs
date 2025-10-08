@@ -8,14 +8,18 @@ namespace AutoriaFinal.Domain.Enums.AuctionEnums
 {
     public enum AuctionWinnerStatus
     {
-        None,          // Hələ qalib seçilməyib
-        Won,           // Qalib buyer seçildi
-        Unsold,        // Heç kim bid etmədi, maşın satılmadı
-        
-        Pending,       // Qalib təyin olunub, amma təsdiq/proses hələ bitməyib
-        Confirmed,     // Qalib rəsmi olaraq təsdiqlənib
-        Rejected,      // Satıcı tərəfindən rədd edilib
-        PaymentFailed, // Qalib ödəniş etmədi və ya uğursuz oldu
-        Completed
+        Pending = 0,                    // No winner yet
+        Won = 1,                        // Winner determined
+        Unsold = 2,                     // No sale
+        AwaitingSellerApproval = 3,     // Seller must approve
+        SellerApproved = 4,             // Seller approved sale
+        SellerRejected = 5,             // Seller rejected sale
+        DepositPaid = 6,                // Winner paid deposit
+        PaymentComplete = 7,            // Full payment received
+        Completed = 8,                  // Transaction complete
+        PaymentFailed = 9,              // Payment failed
+        PaymentOverdue = 10,            // Payment overdue
+        Cancelled = 11,
+        Confirmed = 12
     }
 }

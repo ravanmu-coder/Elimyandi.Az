@@ -13,19 +13,19 @@ export function Badge({
   children, 
   className = '' 
 }: BadgeProps) {
-  const baseClasses = 'inline-flex items-center font-medium rounded-full'
+  const baseClasses = 'inline-flex items-center font-body font-medium rounded-full'
   
   const variantClasses = {
-    success: 'bg-green-100 text-green-800',
-    danger: 'bg-red-100 text-red-800',
-    warning: 'bg-yellow-100 text-yellow-800',
-    info: 'bg-blue-100 text-blue-800',
-    neutral: 'bg-gray-100 text-gray-700'
+    success: 'bg-accent-success/10 text-accent-success border border-accent-success/20',
+    danger: 'bg-accent-error/10 text-accent-error border border-accent-error/20',
+    warning: 'bg-accent-warning/10 text-accent-warning border border-accent-warning/20',
+    info: 'bg-accent-info/10 text-accent-info border border-accent-info/20',
+    neutral: 'bg-dark-bg-tertiary text-dark-text-secondary border border-dark-border'
   }
   
   const sizeClasses = {
-    sm: 'px-2 py-0.5 text-xs',
-    md: 'px-3 py-1 text-sm'
+    sm: 'px-2 py-0.5 text-body-xs',
+    md: 'px-3 py-1 text-body-sm'
   }
 
   return (

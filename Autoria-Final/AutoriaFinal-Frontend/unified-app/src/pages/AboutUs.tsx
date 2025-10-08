@@ -1,5 +1,5 @@
 import React from 'react';
-import { useLanguage } from '../hooks/useLanguage.tsx';
+import { useTranslation } from 'react-i18next';
 import { 
   Car, 
   Users, 
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 export default function AboutUs() {
-  const { t } = useLanguage();
+  const { t } = useTranslation();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-900 to-slate-900">

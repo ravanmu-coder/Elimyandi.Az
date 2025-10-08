@@ -30,7 +30,7 @@ namespace AutoriaFinal.Contract.Services.Auctions
         Task<BidDetailDto> PlaceProxyBidAsync(ProxyBidDto dto);
 
         // ========== BID VALİDASİYASI ==========
-            
+
         /// UI-də istifadəçiyə bid vermək mümkün olub-olmadığını göstərmək üçün
         Task<BidValidationResult> ValidateBidAsync(BidCreateDto dto);
 
@@ -50,6 +50,15 @@ namespace AutoriaFinal.Contract.Services.Auctions
 
         /// İstifadəçi proxy bid-i dayandırmaq istəyə bilər
         Task<bool> CancelProxyBidAsync(Guid bidId, Guid userId);
+
+        // ✅ YENİ: Proxy Bid War Məntiq
+
+        /// Proxy bid-lər arasında intelligent war - real eBay məntiqi
+        Task<ProxyWarResult> ProcessProxyBidWarAsync(Guid auctionCarId, decimal incomingBidAmount, Guid incomingUserId);
+        /// Proxy bid efficiency analysis - user-ə strategiya təklif edir
+        Task<ProxyEfficiencyResult> AnalyzeProxyEfficiencyAsync(Guid auctionCarId, decimal proposedMax, Guid userId);
+        /// Real-time proxy status monitoring
+        Task<ProxyStatusResult> GetProxyBattleStatusAsync(Guid auctionCarId);
 
         // ========== BID TARİXÇƏSİ VƏ STATİSTİKA ==========
 
@@ -99,5 +108,56 @@ namespace AutoriaFinal.Contract.Services.Auctions
         public bool RequiresPreBid { get; set; }
         public bool AuctionActive { get; set; }
     }
-}
 
+    // ✅ YENİ: Proxy War Result
+    public class ProxyWarResult
+    {
+        public bool IsOutbid { get; set; }
+        public decimal FinalAmount { get; set; }
+        public Guid WinningProxyUserId { get; set; }
+        public Guid WinningProxyBidId { get; set; }
+        public List<ProxyWarStep> WarSteps { get; set; } = new();
+        public string WarSummary { get; set; } = "";
+        public TimeSpan BattleDuration { get; set; }
+    }
+
+    public class ProxyWarStep
+    {
+        public Guid ProxyBidId { get; set; }
+        public Guid UserId { get; set; }
+        public decimal Amount { get; set; }
+        public string Action { get; set; } = "";
+        public DateTime Timestamp { get; set; }
+    }
+
+    // ✅ YENİ: Proxy Efficiency Analysis
+    public class ProxyEfficiencyResult
+    {
+        public bool IsRecommended { get; set; }
+        public decimal RecommendedMax { get; set; }
+        public decimal WinProbability { get; set; } // 0-100%
+        public string Strategy { get; set; } = "";
+        public List<string> Insights { get; set; } = new();
+        public decimal EstimatedFinalPrice { get; set; }
+    }
+
+    // ✅ YENİ: Real-time Proxy Status
+    public class ProxyStatusResult
+    {
+        public int ActiveProxyCount { get; set; }
+        public decimal HighestProxyMax { get; set; }
+        public decimal CurrentBattlePrice { get; set; }
+        public bool IsWarActive { get; set; }
+        public List<ProxyParticipant> Participants { get; set; } = new();
+        public string BattlePhase { get; set; } = ""; // "Warming", "Active", "Finishing"
+    }
+
+    public class ProxyParticipant
+    {
+        public Guid UserId { get; set; }
+        public string UserName { get; set; } = "";
+        public decimal EstimatedCapacity { get; set; } // Approximate - gizli
+        public string Status { get; set; } = ""; // "Leading", "Competing", "Exhausted"
+        public DateTime LastActivity { get; set; }
+    }
+}

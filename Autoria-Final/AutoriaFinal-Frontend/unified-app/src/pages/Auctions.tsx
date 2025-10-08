@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../lib/api';
 import { AuctionGetDto } from '../types/api';
@@ -36,8 +36,20 @@ export default function Auctions() {
 
   const loadAuctions = async () => {
     try {
+      setIsLoading(true);
       const data = await apiClient.getAuctions();
-      setAuctions(data);
+      
+      // Filter out ended/completed auctions by default
+      const activeAuctions = data.filter(auction => {
+        const status = auction.status?.toLowerCase();
+        const startTime = new Date(auction.startTimeUtc);
+        const now = new Date();
+        
+        // Include if status is "Running" or if start time is in the future
+        return (auction.isLive || status === 'running') || startTime > now;
+      });
+      
+      setAuctions(activeAuctions);
     } catch (error) {
       console.error('Error loading auctions:', error);
     } finally {
@@ -51,15 +63,19 @@ export default function Auctions() {
     // Apply status filter
     if (activeFilter !== 'all') {
       filtered = filtered.filter(auction => {
+        const status = auction.status?.toLowerCase();
+        const startTime = new Date(auction.startTimeUtc);
+        const now = new Date();
+        
         switch (activeFilter) {
           case 'live':
-            return auction.isLive;
+            return auction.isLive || status === 'running';
           case 'upcoming':
-            return new Date(auction.startTimeUtc) > new Date() && !auction.isLive;
+            return startTime > now && !auction.isLive && status !== 'running';
           case 'active':
-            return auction.status?.toLowerCase() === 'active' || auction.isLive;
+            return auction.isLive || status === 'running' || status === 'active';
           case 'ended':
-            return auction.status?.toLowerCase() === 'ended' || auction.status?.toLowerCase() === 'completed';
+            return status === 'ended' || status === 'completed';
           default:
             return true;
         }
@@ -69,8 +85,8 @@ export default function Auctions() {
     // Apply search filter
     if (searchTerm) {
       filtered = filtered.filter(auction =>
-        auction.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        auction.locationName?.toLowerCase().includes(searchTerm.toLowerCase())
+        (auction.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (auction.locationName || '').toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -168,13 +184,17 @@ export default function Auctions() {
                   {filter.key !== 'all' && (
                     <span className="ml-2 bg-white px-2 py-0.5 rounded-full text-xs">
                       {auctions.filter(auction => {
+                        const status = auction.status?.toLowerCase();
+                        const startTime = new Date(auction.startTimeUtc);
+                        const now = new Date();
+                        
                         switch (filter.key) {
                           case 'live':
-                            return auction.isLive;
+                            return auction.isLive || status === 'running';
                           case 'upcoming':
-                            return new Date(auction.startTimeUtc) > new Date() && !auction.isLive;
+                            return startTime > now && !auction.isLive && status !== 'running';
                           case 'active':
-                            return auction.status?.toLowerCase() === 'active' || auction.isLive;
+                            return auction.isLive || status === 'running' || status === 'active';
                           default:
                             return false;
                         }

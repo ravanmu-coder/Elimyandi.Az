@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useLanguage } from '../hooks/useLanguage.tsx';
+import { useTranslation } from 'react-i18next';
 import { 
   Car, 
   ArrowRight, 
@@ -38,7 +38,7 @@ interface VehiclePriceEstimate {
 }
 
 export default function AIValuation() {
-  const { t } = useLanguage();
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     make: '',
     model: '',

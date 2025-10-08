@@ -145,7 +145,6 @@ namespace AutoriaFinal.API.Controllers.Auctions
             if (!success)
                 return NotFound(CopartApiResponse<string>.Error("Winner not found", 404));
 
-            // single-message success -> use SuccessMessage to avoid overload ambiguity
             return Ok(CopartApiResponse<string>.SuccessMessage("Winner deleted successfully"));
         }
 
@@ -355,7 +354,7 @@ namespace AutoriaFinal.API.Controllers.Auctions
 
         [HttpPost("{id:guid}/reject")]
         [ProducesResponseType(typeof(CopartApiResponse<AuctionWinnerDetailDto>), StatusCodes.Status200OK)]
-        public async Task<ActionResult> RejectWinner(Guid id, [FromBody] RejectWinnerRequest request)
+        public async Task<ActionResult> RejectWinner(Guid id, [FromBody] AuctionWinnerRejectRequest request)
         {
             var currentUserId = GetCurrentUserId();
             _logger.LogInformation("❌ Rejecting winner by seller: Winner {WinnerId}, Seller {SellerId}, Reason: {Reason}",
@@ -727,7 +726,7 @@ namespace AutoriaFinal.API.Controllers.Auctions
 
         #endregion
 
-        #region Request Models
+        #region Request Models - AuctionWinner Controller Specific
 
         public class ManualAssignRequest
         {
@@ -779,7 +778,8 @@ namespace AutoriaFinal.API.Controllers.Auctions
             public string? ConfirmationNotes { get; set; }
         }
 
-        public class RejectWinnerRequest
+        // ⚠️ CRITICAL: Bu sinifin adını dəyişdik ki, AuctionCarController-dəki RejectWinnerRequest ilə qarışmasın
+        public class AuctionWinnerRejectRequest
         {
             [Required]
             public string RejectionReason { get; set; } = default!;
@@ -794,9 +794,8 @@ namespace AutoriaFinal.API.Controllers.Auctions
         #endregion
     }
 
-    #region Copart API Response Model (single, canonical)
+    #region Copart API Response Model
 
-    // Put this class only ONCE in the file/project. Remove any duplicate CopartApiResponse<T> definitions.
     public class CopartApiResponse<T>
     {
         public bool Success { get; set; }

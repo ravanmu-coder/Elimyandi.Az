@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../lib/api';
-import { useLanguage } from '../hooks/useLanguage.tsx';
+import { useTranslation } from 'react-i18next';
 
 export default function ConfirmEmail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState<string>('');
-  const { t } = useLanguage();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const userId = searchParams.get('userId') || undefined;

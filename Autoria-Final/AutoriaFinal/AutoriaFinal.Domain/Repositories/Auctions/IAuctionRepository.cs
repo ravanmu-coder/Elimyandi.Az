@@ -21,10 +21,15 @@ namespace AutoriaFinal.Domain.Repositories.Auctions
         Task<Auction?> GetNextScheduledAuctionAsync(); // Növbəti planlaşdırılmış auction
         Task<IEnumerable<Auction>> GetAuctionsByStatusAsync(AuctionStatus status); // Status-a görə auction-lar
 
-        // atomic transition - DB səviyyəsində UPDATE ... WHERE Status = expected
         Task<bool> TryTransitionAuctionStatusAsync(Guid auctionId, AuctionStatus expectedStatus, AuctionStatus newStatus, CancellationToken ct = default);
 
         // DB-side filter to get running auctions that should end by "asOfUtc"
         Task<IEnumerable<Auction>> GetActiveAuctionsReadyToEndAsync(DateTime asOfUtc, int limit = 100);
+       
+        Task<IEnumerable<Auction>> GetAuctionsReadyToMakeReadyAsync();
+        Task<IEnumerable<Auction>> GetAuctionsReadyToStartAsync();
+        Task<IEnumerable<Auction>> GetExpiredRunningAuctionsAsync();
+        Task<IEnumerable<AuctionCar>> GetCarsNeedingConditionUpdateAsync();
+
     }
 }

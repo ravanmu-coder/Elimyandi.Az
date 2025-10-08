@@ -87,7 +87,7 @@ export const TodayAuctionsEmpty: React.FC<TodayAuctionsEmptyProps> = ({
                   </Link>
 
                   <Link
-                    to="/auctions"
+                    to="/all-auctions"
                     className="inline-flex items-center gap-2 px-6 py-3 border-2 border-white/30 text-white rounded-xl font-medium hover:bg-white/10 transition-all duration-200"
                   >
                     <Search className="h-5 w-5" />

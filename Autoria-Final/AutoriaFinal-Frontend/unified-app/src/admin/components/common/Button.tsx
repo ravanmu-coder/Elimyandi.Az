@@ -21,19 +21,19 @@ export function Button({
   disabled,
   ...props
 }: ButtonProps) {
-  const baseClasses = 'inline-flex items-center justify-center font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed'
+  const baseClasses = 'inline-flex items-center justify-center font-body font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg'
   
   const variantClasses = {
-    primary: 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-sm focus:ring-blue-500',
-    secondary: 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50 hover:shadow-sm focus:ring-blue-500',
-    ghost: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:ring-blue-500',
-    danger: 'bg-red-600 text-white hover:bg-red-700 hover:shadow-sm focus:ring-red-500'
+    primary: 'bg-accent-primary text-white hover:bg-accent-primary/90 focus:ring-accent-primary/50',
+    secondary: 'bg-dark-bg-tertiary text-dark-text-primary border border-dark-border hover:bg-dark-bg-quaternary focus:ring-accent-primary/50',
+    ghost: 'text-dark-text-secondary hover:bg-dark-bg-tertiary hover:text-dark-text-primary focus:ring-accent-primary/50',
+    danger: 'bg-accent-error text-white hover:bg-accent-error/90 focus:ring-accent-error/50'
   }
   
   const sizeClasses = {
-    sm: 'px-3 py-1.5 text-sm rounded-lg',
-    md: 'px-4 py-2 text-sm rounded-xl',
-    lg: 'px-6 py-3 text-base rounded-xl'
+    sm: 'px-3 py-1.5 text-body-sm',
+    md: 'px-4 py-2 text-body-md',
+    lg: 'px-6 py-3 text-body-lg'
   }
 
   const iconSizeClasses = {

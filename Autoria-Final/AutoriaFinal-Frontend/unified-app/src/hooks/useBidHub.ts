@@ -178,7 +178,7 @@ export const useBidHub = (config: BidHubConfig, events: BidHubEvents) => {
       connection.on('HighestBidUpdated', events.onHighestBidUpdated);
       connection.on('AuctionTimerReset', events.onAuctionTimerReset);
       connection.on('BidStatsUpdated', events.onBidStatsUpdated);
-      connection.on('BidValidationError', events.onBidValidationError);
+      // connection.on('BidValidationError', events.onBidValidationError);
       connection.on('BidError', events.onBidError);
 
       // Handle connection state changes
@@ -339,12 +339,26 @@ export const useBidHub = (config: BidHubConfig, events: BidHubEvents) => {
     }
 
     try {
-      console.log('Placing live bid:', { auctionCarId, amount });
+      console.log('=== PLACING LIVE BID ===');
+      console.log('auctionCarId:', auctionCarId);
+      console.log('auctionCarId type:', typeof auctionCarId);
+      console.log('auctionCarId length:', auctionCarId?.length);
+      console.log('amount:', amount);
+      console.log('amount type:', typeof amount);
+      console.log('SignalR connection state:', connectionState);
+      console.log('========================');
+      
       await connectionRef.current.invoke('PlaceLiveBid', auctionCarId, amount);
       console.log('Live bid placed successfully');
       return true;
     } catch (error) {
       console.error('Failed to place live bid:', error);
+      console.error('Error details:', {
+        message: (error as Error).message,
+        stack: (error as Error).stack,
+        auctionCarId,
+        amount
+      });
       events.onBidError(`Failed to place live bid: ${error}`);
       return false;
     }

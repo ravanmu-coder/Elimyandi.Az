@@ -53,6 +53,25 @@ namespace AutoriaFinal.Persistence.Configurations.Auctions
             builder.Property(a => a.CurrentCarStartTime)
                    .IsRequired(false);
 
+            builder.Property(a => a.PreBidStartTimeUtc)
+           .IsRequired(false);
+
+            builder.Property(a => a.PreBidEndTimeUtc)
+                   .IsRequired(false);
+
+            builder.Property(a => a.TotalCarsCount)
+                   .HasDefaultValue(0);
+
+            builder.Property(a => a.CarsWithPreBidsCount)
+                   .HasDefaultValue(0);
+
+            builder.Property(a => a.AutoStart)
+                   .HasDefaultValue(true);
+
+            // ✅ Index-lər əlavə et
+            builder.HasIndex(a => a.PreBidStartTimeUtc);
+            builder.HasIndex(a => a.AutoStart);
+            builder.HasIndex(a => new { a.Status, a.AutoStart });
             // Relationships
             builder.HasOne(a => a.Location)
                    .WithMany()

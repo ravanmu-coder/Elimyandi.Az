@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth.tsx';
-import { useLanguage } from '../hooks/useLanguage.tsx';
+import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, AlertCircle, Check, User, Building2, Zap, ArrowRight, Mail, CheckCircle, Loader2, Globe } from 'lucide-react';
 
 export default function Register() {
@@ -24,7 +24,7 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
 
   const { register } = useAuth();
-  const { language, setLanguage, t } = useLanguage();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [toast, setToast] = useState<string | null>(null);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
@@ -104,8 +104,8 @@ export default function Register() {
         <div className="mb-4 flex justify-end">
           <div className="relative">
             <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value as 'az' | 'en')}
+              value={i18n.language}
+              onChange={(e) => i18n.changeLanguage(e.target.value as 'az' | 'en')}
               className="bg-white/25 border border-white/40 rounded-lg px-3 py-1.5 text-white text-sm focus:bg-white/35 focus:border-blue-400 focus:outline-none transition-all duration-300 shadow-lg appearance-none pr-8"
             >
               <option value="az" className="bg-slate-800 text-white">{t('language.azerbaijani')}</option>

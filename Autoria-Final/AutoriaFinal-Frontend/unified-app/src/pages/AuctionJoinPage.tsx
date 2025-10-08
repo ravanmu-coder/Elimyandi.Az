@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
   MapPin, 
@@ -6,25 +6,51 @@ import {
   ArrowLeft, 
   Clock, 
   Trophy, 
-  Plus,
   Wifi,
-  WifiOff
+  WifiOff,
+  Users,
+  DollarSign,
+  Calendar,
+  Car,
+  Gauge,
+  AlertTriangle,
+  FileText,
+  Hash,
+  Camera,
+  Play,
+  Pause,
+  Zap,
+  Target,
+  TrendingUp,
+  CheckCircle,
+  XCircle,
+  Loader2
 } from 'lucide-react';
-import { apiClient } from '../lib/api';
-import { apiClient as adminApiClient } from '../admin/services/apiClient';
-import { 
-  AuctionGetDto, 
-  AuctionCarDetailDto, 
-  AuctionCarGetDto
-} from '../types/api';
-import { useBidHub } from '../hooks/useBidHub';
+import { useSignalR } from '../hooks/useSignalR';
+import { auctionDataService, AuctionPageData } from '../services/auctionDataService';
 import { useToast } from '../components/ToastProvider';
-import { AuctionOverview } from '../components/AuctionOverview';
-import { VehicleCarousel } from '../components/VehicleCarousel';
-import { LiveBiddingPanel } from '../components/LiveBiddingPanel';
-import { BidHistory } from '../components/BidHistory';
-import { AddVehicleModal } from '../components/AddVehicleModal';
-import { BidHubDebugger } from '../components/BidHubDebugger';
+import { AuctionGetDto, AuctionCarDetailDto, CarDto } from '../types/api';
+
+// Types
+interface BidData {
+  id: string;
+  auctionCarId: string;
+  userId: string;
+  amount: number;
+  placedAtUtc: string;
+  userName: string;
+  isHighestBid: boolean;
+}
+
+interface BidStats {
+  totalBids: number;
+  bidCount: number;
+  averageBid: number;
+  soldCount: number;
+  totalSalesAmount: number;
+}
+
+type BidTab = 'live' | 'prebid' | 'proxy';
 
 const AuctionJoinPage: React.FC = () => {
   const navigate = useNavigate();
@@ -32,133 +58,267 @@ const AuctionJoinPage: React.FC = () => {
   const { addToast } = useToast();
 
   // State management
-  const [auction, setAuction] = useState<AuctionGetDto | null>(null);
-  const [currentCar, setCurrentCar] = useState<AuctionCarDetailDto | null>(null);
-  const [upcomingCars, setUpcomingCars] = useState<AuctionCarGetDto[]>([]);
+  const [pageData, setPageData] = useState<AuctionPageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timerSeconds, setTimerSeconds] = useState<number>(0);
-  const [isAuctionLive, setIsAuctionLive] = useState(false);
-  const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
-  const [showDebugger, setShowDebugger] = useState(false);
-  const [bidStats, setBidStats] = useState({
+  const [bidHistory, setBidHistory] = useState<BidData[]>([]);
+  const [bidAmount, setBidAmount] = useState<string>('');
+  const [proxyMaxAmount, setProxyMaxAmount] = useState<string>('');
+  const [isPlacingBid, setIsPlacingBid] = useState(false);
+  const [minimumBid, setMinimumBid] = useState<number>(0);
+  const [activeBidTab, setActiveBidTab] = useState<BidTab>('live');
+  const [bidStats] = useState<BidStats>({
     totalBids: 0,
     bidCount: 0,
     averageBid: 0,
     soldCount: 0,
     totalSalesAmount: 0
   });
-  const [bidHistory, setBidHistory] = useState<any[]>([]);
-  const [currentUserId] = useState<string>('');
 
-  // BidHub integration with stable references
-  const bidHubConfig = {
+  // Refs
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // SignalR configuration
+  const signalRConfig = {
     baseUrl: 'https://localhost:7249',
-    token: localStorage.getItem('authToken') || localStorage.getItem('auth_token') || ''
-  };
+    token: localStorage.getItem('authToken') || localStorage.getItem('auth_token') || '',
+    autoConnect: true,
+    events: {
+      onNewLiveBid: useCallback((data: { auctionCarId: string; bid: any }) => {
+        console.log('🎯 New live bid received:', data);
+        
+        try {
+          const bidData = data.bid as BidData;
+          
+          // Update bid history
+          setBidHistory(prev => {
+            const newHistory = [bidData, ...prev.slice(0, 9)]; // Keep last 10 bids
+            console.log('📊 Updated bid history:', newHistory.length, 'bids');
+            return newHistory;
+          });
+          
+          // Update current car data if this bid is for the current car
+          if (pageData?.currentCar?.id === data.auctionCarId) {
+            setPageData(prev => {
+              if (!prev) return null;
+              
+              const updatedData = {
+                ...prev,
+                currentCar: prev.currentCar ? {
+                  ...prev.currentCar,
+                  currentPrice: bidData.amount,
+                  bidCount: (prev.currentCar.bidCount || 0) + 1,
+                  lastBidTime: bidData.placedAtUtc
+                } : null,
+                highestBid: {
+                  amount: bidData.amount,
+                  bidderName: bidData.userName,
+                  placedAtUtc: bidData.placedAtUtc
+                }
+              };
+              
+              console.log('💰 Updated current car price:', bidData.amount);
+              return updatedData;
+            });
+            
+            // Update minimum bid for next bid
+            setMinimumBid(() => {
+              const newMin = bidData.amount + 100; // Assume $100 increment
+              console.log('📈 Updated minimum bid:', newMin);
+              return newMin;
+            });
+          }
 
-  const bidHubEvents = {
-    onJoinedAuctionCar: (data: any) => {
-      console.log('Joined auction car:', data);
-      setBidStats(data.stats);
-      setCurrentCar(prev => prev ? {
-        ...prev,
-        currentPrice: data.highestBid,
-        bidCount: data.stats.bidCount,
-        lastBidTime: data.lastBidTime
-      } : null);
-    },
-    onNewLiveBid: (data: any) => {
-      console.log('New live bid:', data);
-      setBidHistory(prev => [data, ...prev]);
-      if (currentCar?.id === data.auctionCarId) {
-        setCurrentCar(prev => prev ? {
-          ...prev,
-          currentPrice: data.amount,
-          bidCount: (prev.bidCount || 0) + 1,
-          lastBidTime: data.placedAtUtc
-        } : null);
-      }
-      addToast({
-        type: 'success',
-        title: 'New Live Bid',
-        message: `${data.userName} bid $${data.amount.toLocaleString()}`
-      });
-    },
-    onPreBidPlaced: (data: any) => {
-      console.log('Pre-bid placed:', data);
-      setBidHistory(prev => [data, ...prev]);
-      addToast({
-        type: 'info',
-        title: 'Pre-Bid Placed',
-        message: `${data.userName} placed a pre-bid of $${data.amount.toLocaleString()}`
-      });
-    },
-    onHighestBidUpdated: (data: any) => {
-      console.log('Highest bid updated:', data);
-      if (currentCar?.id === data.auctionCarId) {
-        setCurrentCar(prev => prev ? {
-          ...prev,
-          currentPrice: data.amount
-        } : null);
-      }
-    },
-    onAuctionTimerReset: (data: any) => {
-      console.log('Auction timer reset:', data);
-      if (currentCar?.id === data.auctionCarId) {
-        setTimerSeconds(data.secondsRemaining);
-      }
-    },
-    onBidStatsUpdated: (data: any) => {
-      console.log('Bid stats updated:', data);
-      if (currentCar?.id === data.auctionCarId) {
-        setBidStats(data.stats);
-      }
-    },
-    onBidValidationError: (data: any) => {
-      console.log('Bid validation error:', data);
-      addToast({
-        type: 'error',
-        title: 'Bid Validation Error',
-        message: data.errors.join(', ')
-      });
-    },
-    onBidError: (error: string) => {
-      console.error('Bid error:', error);
-      addToast({
-        type: 'error',
-        title: 'Bid Error',
-        message: error
-      });
-    },
-    onConnectionStateChanged: (isConnected: boolean, error?: string) => {
-      console.log('BidHub connection state changed:', isConnected, error);
-      if (!isConnected && error) {
-        addToast({
-          type: 'warning',
-          title: 'Connection Lost',
-          message: 'Lost connection to auction. Attempting to reconnect...'
-        });
-      }
+          // Show toast notification
+          addToast({
+            type: 'success',
+            title: 'New Live Bid',
+            message: `${bidData.userName} bid $${bidData.amount.toLocaleString()}`
+          });
+          
+        } catch (error) {
+          console.error('❌ Error processing new live bid:', error);
+        }
+      }, [pageData?.currentCar?.id, addToast]),
+
+      onAuctionTimerReset: useCallback((data: { auctionCarId: string; newTimerSeconds: number }) => {
+        console.log('⏰ Auction timer reset:', data);
+        
+        try {
+          if (pageData?.currentCar?.id === data.auctionCarId) {
+            setTimerSeconds(data.newTimerSeconds);
+            console.log('⏱️ Timer updated to:', data.newTimerSeconds, 'seconds');
+            
+            addToast({
+              type: 'info',
+              title: 'Timer Reset',
+              message: `Timer extended to ${Math.floor(data.newTimerSeconds / 60)}:${(data.newTimerSeconds % 60).toString().padStart(2, '0')}`
+            });
+          }
+        } catch (error) {
+          console.error('❌ Error processing timer reset:', error);
+        }
+      }, [pageData?.currentCar?.id, addToast]),
+
+      onMoveToNextCar: useCallback(async (data: { previousCarId: string; nextCarId: string; nextLotNumber: string }) => {
+        console.log('🚗 Moving to next car:', data);
+        
+        try {
+          // Leave previous car group
+          if (data.previousCarId) {
+            // Note: leaveAuctionCar will be available from the hook
+            console.log('👋 Would leave previous car group:', data.previousCarId);
+          }
+          
+          // Switch to new car in SignalR
+          // Note: joinAuctionCar will be available from the hook
+          console.log('✅ Would join new car group:', data.nextCarId);
+
+          // Refresh data for new car
+          const newCarData = await auctionDataService.refreshCurrentCarData(data.nextLotNumber);
+          
+          setPageData(prev => prev ? {
+            ...prev,
+            currentCar: newCarData.currentCar,
+            carDetails: newCarData.carDetails,
+            highestBid: newCarData.highestBid,
+            bidHistory: newCarData.bidHistory
+          } : null);
+
+          // Reset bid form and state
+          setBidAmount('');
+          setProxyMaxAmount('');
+          setActiveBidTab('live');
+          setBidHistory(newCarData.bidHistory);
+          
+          // Update minimum bid for new car
+          if (newCarData.currentCar) {
+            try {
+              const minBid = await auctionDataService.getMinimumBid(newCarData.currentCar.id);
+              setMinimumBid(minBid);
+            } catch (error) {
+              console.warn('⚠️ Failed to load minimum bid for new car:', error);
+              setMinimumBid(newCarData.currentCar.currentPrice || 0);
+            }
+          }
+
+          addToast({
+            type: 'info',
+            title: 'Next Vehicle',
+            message: `Now showing Lot #${data.nextLotNumber}`
+          });
+          
+        } catch (error) {
+          console.error('❌ Failed to move to next car:', error);
+          addToast({
+            type: 'error',
+            title: 'Car Switch Error',
+            message: 'Failed to switch to next vehicle'
+          });
+        }
+      }, [addToast]),
+
+      onHighestBidUpdated: useCallback((data: { auctionCarId: string; highestBid: any }) => {
+        console.log('💰 Highest bid updated:', data);
+        
+        try {
+          if (pageData?.currentCar?.id === data.auctionCarId) {
+            setPageData(prev => {
+              if (!prev) return null;
+              
+              return {
+                ...prev,
+                currentCar: prev.currentCar ? {
+                  ...prev.currentCar,
+                  currentPrice: data.highestBid.amount
+                } : null,
+                highestBid: {
+                  amount: data.highestBid.amount,
+                  bidderName: data.highestBid.bidderName,
+                  placedAtUtc: new Date().toISOString()
+                }
+              };
+            });
+            
+            console.log('💰 Updated highest bid:', data.highestBid.amount);
+          }
+        } catch (error) {
+          console.error('❌ Error processing highest bid update:', error);
+        }
+      }, [pageData?.currentCar?.id]),
+
+      onBidStatsUpdated: useCallback((data: { auctionCarId: string; stats: BidStats }) => {
+        console.log('📊 Bid stats updated:', data);
+        
+        try {
+          if (pageData?.currentCar?.id === data.auctionCarId) {
+            setBidStats(data.stats);
+            console.log('📊 Updated bid stats:', data.stats);
+          }
+        } catch (error) {
+          console.error('❌ Error processing bid stats update:', error);
+        }
+      }, [pageData?.currentCar?.id]),
+
+      onConnectionStateChanged: useCallback((state: any, error?: string) => {
+        console.log('🔌 Connection state changed:', state, error);
+        
+        try {
+          if (state !== 'Connected' && error) {
+            addToast({
+              type: 'warning',
+              title: 'Connection Lost',
+              message: 'Lost connection to auction. Attempting to reconnect...'
+            });
+          } else if (state === 'Connected') {
+            addToast({
+              type: 'success',
+              title: 'Connected',
+              message: 'Successfully connected to auction'
+            });
+          }
+        } catch (error) {
+          console.error('❌ Error processing connection state change:', error);
+        }
+      }, [addToast]),
+
+      onBidError: useCallback((error: string) => {
+        console.error('❌ Bid error:', error);
+        
+        try {
+          addToast({
+            type: 'error',
+            title: 'Bid Error',
+            message: error
+          });
+        } catch (error) {
+          console.error('❌ Error processing bid error:', error);
+        }
+      }, [addToast])
     }
   };
 
-  const { 
-    connectionState, 
-    connect, 
-    disconnect, 
-    testConnection,
-    joinAuctionCar, 
+  // Use SignalR hook
+  const {
+    isConnected,
+    isConnecting,
+    lastError,
+    retryCount,
+    connect,
+    disconnect,
+    waitForConnection,
+    joinAuction,
+    joinAuctionCar,
     leaveAuctionCar,
     placeLiveBid,
     placePreBid,
     placeProxyBid,
-    cancelProxyBid,
-    getMyBids
-  } = useBidHub(bidHubConfig, bidHubEvents);
+    cancelProxyBid
+  } = useSignalR(signalRConfig);
 
-  // Load auction data
-  const loadAuction = useCallback(async () => {
+  // Initialize auction page data with progressive loading
+  const initializeAuctionPage = useCallback(async () => {
     if (!auctionId) {
       setError('No auction ID provided');
       setLoading(false);
@@ -169,496 +329,965 @@ const AuctionJoinPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      console.log('Loading auction with ID:', auctionId);
-
-      // Load specific auction by ID
-      let selectedAuction: AuctionGetDto | null = null;
+      console.log('🚀 Initializing auction page for:', auctionId);
       
-      try {
-        // First try to get the auction from the regular API
-        const allAuctions = await apiClient.getAuctions();
-        selectedAuction = allAuctions.find(auction => auction.id === auctionId) || null;
-        console.log('Found auction in regular API:', selectedAuction);
-      } catch (error) {
-        console.log('Regular API failed, trying admin API:', error);
-      }
-
-      // If not found in regular API, try admin API
-      if (!selectedAuction) {
+      // Step 1: Load critical auction data first
+      const data = await auctionDataService.initializeAuctionPage(auctionId);
+      
+      setPageData(data);
+      setTimerSeconds(data.currentState.timerSeconds);
+      setBidHistory(data.bidHistory);
+      
+      // Step 2: Load minimum bid if we have a current car
+      if (data.currentCar) {
         try {
-          const adminAuctions = await adminApiClient.getAuctions({ limit: 100 });
-          selectedAuction = adminAuctions.find(auction => auction.id === auctionId) || null;
-          console.log('Found auction in admin API:', selectedAuction);
+          const minBid = await auctionDataService.getMinimumBid(data.currentCar.id);
+          setMinimumBid(minBid);
+          console.log('✅ Minimum bid loaded:', minBid);
         } catch (error) {
-          console.log('Admin API failed:', error);
+          console.warn('⚠️ Failed to load minimum bid, using default:', error);
+          setMinimumBid(data.currentCar.currentPrice || 0);
         }
       }
 
-      if (selectedAuction) {
-        console.log('Selected auction:', selectedAuction);
-        setAuction(selectedAuction);
-        setIsAuctionLive(selectedAuction.status === 'Live' || selectedAuction.isLive === true);
+      console.log('✅ Auction page initialized successfully');
 
-        // Load cars for this auction
-        try {
-          const cars = await apiClient.getAuctionCars(selectedAuction.id);
-          console.log('Auction cars:', cars);
-          
-          if (cars && cars.length > 0) {
-            // Set the first car as current
-            const firstCar = cars[0];
-            console.log('Setting first car as current:', firstCar);
-            setCurrentCar(firstCar as AuctionCarDetailDto);
-            
-            // Set remaining cars as upcoming
-            const remainingCars = cars.slice(1);
-            setUpcomingCars(remainingCars);
-            console.log('Upcoming cars:', remainingCars);
-          } else {
-            console.log('No cars found for auction');
-            setCurrentCar(null);
-            setUpcomingCars([]);
-          }
-        } catch (carError) {
-          console.error('Failed to load auction cars:', carError);
-          setError(`Failed to load auction cars: ${carError instanceof Error ? carError.message : 'Unknown error'}`);
-        }
-
-        // Set timer based on auction status
-        if (selectedAuction.status === 'Live' || selectedAuction.isLive) {
-          // For live auctions, calculate remaining time until end
-          const endTime = new Date(selectedAuction.endTimeUtc);
-          const now = new Date();
-          const timeUntilEnd = Math.max(0, Math.floor((endTime.getTime() - now.getTime()) / 1000));
-          setTimerSeconds(timeUntilEnd);
-        } else {
-          // For scheduled auctions, calculate time until start
-          const startTime = new Date(selectedAuction.startTimeUtc);
-          const now = new Date();
-          const timeUntilStart = Math.max(0, Math.floor((startTime.getTime() - now.getTime()) / 1000));
-          setTimerSeconds(timeUntilStart);
-        }
-      } else {
-        console.log('Auction not found with ID:', auctionId);
-        setAuction(null);
-        setCurrentCar(null);
-        setUpcomingCars([]);
-        setError(`Auction with ID ${auctionId} not found. Please check the auction ID and try again.`);
-      }
     } catch (error) {
-      console.error('Failed to load auction:', error);
-      setError(`API Error: ${error instanceof Error ? error.message : 'Unknown error'}. Please check if the backend server is running on https://localhost:7249`);
-      setAuction(null);
-      setCurrentCar(null);
-      setUpcomingCars([]);
+      console.error('❌ Failed to initialize auction page:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // Categorize error for better user experience
+      if (errorMessage.includes('Network Error') || errorMessage.includes('Failed to fetch')) {
+        setError('Unable to connect to the server. Please check your internet connection and try again.');
+      } else if (errorMessage.includes('Authentication')) {
+        setError('Authentication failed. Please log in again.');
+      } else if (errorMessage.includes('404')) {
+        setError('Auction not found. Please check the auction ID.');
+      } else {
+        setError(`Failed to load auction: ${errorMessage}`);
+      }
     } finally {
       setLoading(false);
     }
   }, [auctionId]);
 
+  // Connect to SignalR when data is loaded with proper error handling
+  useEffect(() => {
+    const connectToSignalR = async () => {
+      if (!pageData) return;
+      
+      // Don't attempt connection if already connected or if we've exceeded retry limit
+      if (isConnected || isConnecting || (retryCount >= 5)) {
+        return;
+      }
+
+      try {
+        console.log('🔌 Connecting to SignalR...');
+        
+        // Connect to SignalR
+        await connect();
+        
+        // Wait for connection to be established
+        const connectionEstablished = await waitForConnection(10000);
+        if (!connectionEstablished) {
+          console.error('❌ SignalR connection timeout');
+          return;
+        }
+
+        console.log('✅ SignalR connected, joining groups...');
+        
+        // Join auction group
+        await joinAuction(pageData.auction.id);
+        console.log('✅ Joined auction group:', pageData.auction.id);
+        
+        // Join car group if we have a current car
+        if (pageData.currentCar?.id) {
+          await joinAuctionCar(pageData.currentCar.id);
+          console.log('✅ Joined car group:', pageData.currentCar.id);
+        }
+
+        console.log('🎉 SignalR setup complete');
+        
+      } catch (error) {
+        console.error('❌ SignalR connection failed:', error);
+        // Don't set error state here as the page can still function without SignalR
+      }
+    };
+    
+    connectToSignalR();
+  }, [pageData, isConnected, isConnecting, retryCount, connect, waitForConnection, joinAuction, joinAuctionCar]);
+
   // Timer effect
   useEffect(() => {
     if (timerSeconds > 0) {
-      const timer = setInterval(() => {
+      timerRef.current = setInterval(() => {
         setTimerSeconds(prev => {
           if (prev <= 1) {
-            // Timer reached zero, refresh auction data
-            loadAuction();
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
 
-      return () => clearInterval(timer);
+      return () => {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+        }
+      };
     }
-  }, [timerSeconds, loadAuction]);
-
-  // Event handlers
-  const handleRefresh = useCallback(() => {
-    loadAuction();
-  }, [loadAuction]);
-
-  const handleVehicleAdded = useCallback((vehicle: any) => {
-    console.log('Vehicle added:', vehicle);
-    addToast({
-      type: 'success',
-      title: 'Vehicle Added',
-      message: 'Vehicle has been added to the auction successfully!'
-    });
-    // Refresh the auction data to show the new vehicle
-    loadAuction();
-  }, [addToast, loadAuction]);
-
-  const handlePlaceLiveBid = useCallback(async (amount: number): Promise<boolean> => {
-    if (!currentCar?.id) return false;
-    
-    const success = await placeLiveBid(currentCar.id, amount);
-    if (success) {
-      addToast({
-        type: 'success',
-        title: 'Bid Placed',
-        message: `Live bid of $${amount.toLocaleString()} placed successfully!`
-      });
-    }
-    return success;
-  }, [currentCar?.id, placeLiveBid, addToast]);
-
-  const handlePlacePreBid = useCallback(async (amount: number): Promise<boolean> => {
-    if (!currentCar?.id) return false;
-    
-    const success = await placePreBid(currentCar.id, amount);
-    if (success) {
-      addToast({
-        type: 'success',
-        title: 'Pre-Bid Placed',
-        message: `Pre-bid of $${amount.toLocaleString()} placed successfully!`
-      });
-    }
-    return success;
-  }, [currentCar?.id, placePreBid, addToast]);
-
-  const handlePlaceProxyBid = useCallback(async (startAmount: number, maxAmount: number): Promise<boolean> => {
-    if (!currentCar?.id) return false;
-    
-    const success = await placeProxyBid(currentCar.id, maxAmount, startAmount);
-    if (success) {
-      addToast({
-        type: 'success',
-        title: 'Proxy Bid Placed',
-        message: `Proxy bid with max amount $${maxAmount.toLocaleString()} placed successfully!`
-      });
-    }
-    return success;
-  }, [currentCar?.id, placeProxyBid, addToast]);
-
-  const handleCancelProxyBid = useCallback(async (): Promise<boolean> => {
-    if (!currentCar?.id) return false;
-    
-    const success = await cancelProxyBid(currentCar.id);
-    if (success) {
-      addToast({
-        type: 'info',
-        title: 'Proxy Bid Cancelled',
-        message: 'Proxy bid has been cancelled successfully!'
-      });
-    }
-    return success;
-  }, [currentCar?.id, cancelProxyBid, addToast]);
-
-  const handleRefreshBidHistory = useCallback(async () => {
-    if (!currentCar?.id) return;
-    
-    try {
-      const bids = await getMyBids(currentCar.id);
-      setBidHistory(bids);
-    } catch (error) {
-      console.error('Failed to refresh bid history:', error);
-    }
-  }, [currentCar?.id, getMyBids]);
+  }, [timerSeconds]);
 
   // Load data on mount
   useEffect(() => {
-    if (auctionId) {
-      loadAuction();
-    }
-  }, [auctionId, loadAuction]);
+    initializeAuctionPage();
+  }, [initializeAuctionPage]);
 
-  // Connect to BidHub when auction and car are loaded - FIXED: Removed problematic dependencies
+  // Cleanup on unmount
   useEffect(() => {
-    const initializeConnection = async () => {
-      if (auction?.id && currentCar?.id) {
-        console.log('Initializing BidHub connection for auction:', auction.id, 'car:', currentCar.id);
-        
-        // Test backend connectivity first
-        const isBackendReachable = await testConnection();
-        if (!isBackendReachable) {
-          setError('Cannot connect to backend server. Please check if the server is running on https://localhost:7249');
-          return;
-        }
-        
-        // Attempt to connect to BidHub
-        try {
-          await connect();
-          
-          // Join the specific auction car after successful connection
-          setTimeout(async () => {
-            await joinAuctionCar(currentCar.id);
-          }, 1000);
-        } catch (error) {
-          console.error('Failed to connect to BidHub:', error);
-          setError(`Failed to connect to auction: ${error}`);
-        }
-      }
-    };
-
-    initializeConnection();
-
     return () => {
-      if (currentCar?.id) {
-        leaveAuctionCar(currentCar.id);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
       }
       disconnect();
     };
-  }, [auction?.id, currentCar?.id]); // FIXED: Only depend on auction and car IDs
+  }, [disconnect]);
 
-  // Show empty state if no auction found
-  if (!loading && !auction && !error) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
-        <div className="text-center max-w-2xl mx-auto px-4">
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-lg p-8">
-            <Clock className="h-16 w-16 text-white/60 mx-auto mb-6" />
-            <h2 className="text-2xl font-bold text-white mb-4">Auction Not Found</h2>
-            <p className="text-white/80 mb-6">
-              The auction you're looking for could not be found. Please check the auction ID and try again.
-            </p>
-            <button
-              onClick={() => navigate('/todays-auctions')}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Back to Today's Auctions
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Bid handlers with improved validation and error handling
+  const handlePlaceLiveBid = useCallback(async () => {
+    if (!pageData?.currentCar || !bidAmount || isPlacingBid) return;
 
-  // Show loading state
+    const amount = parseFloat(bidAmount);
+    
+    // Enhanced validation
+    if (isNaN(amount) || amount <= 0) {
+      addToast({
+        type: 'error',
+        title: 'Invalid Bid Amount',
+        message: 'Please enter a valid bid amount'
+      });
+      return;
+    }
+
+    if (amount < minimumBid) {
+      addToast({
+        type: 'error',
+        title: 'Bid Too Low',
+        message: `Minimum bid is $${minimumBid.toLocaleString()}`
+      });
+      return;
+    }
+
+    // Check if auction is live
+    if (!pageData.currentState.isLive) {
+      addToast({
+        type: 'error',
+        title: 'Auction Not Live',
+        message: 'Live bidding is not available for this auction'
+      });
+      return;
+    }
+
+    // Check SignalR connection
+    if (!isConnected) {
+      addToast({
+        type: 'warning',
+        title: 'Connection Required',
+        message: 'Please wait for connection to be established'
+      });
+      return;
+    }
+
+    setIsPlacingBid(true);
+    try {
+      console.log('🎯 Placing live bid:', { auctionCarId: pageData.currentCar.id, amount });
+      const success = await placeLiveBid(pageData.currentCar.id, amount);
+      
+      if (success) {
+        setBidAmount('');
+        addToast({
+          type: 'success',
+          title: 'Live Bid Placed',
+          message: `Bid of $${amount.toLocaleString()} placed successfully!`
+        });
+        
+        // Invalidate cache to get fresh data
+        auctionDataService.invalidateCache(pageData.currentCar.id);
+      } else {
+        addToast({
+          type: 'error',
+          title: 'Bid Failed',
+          message: 'Failed to place bid. Please try again.'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to place live bid:', error);
+      addToast({
+        type: 'error',
+        title: 'Bid Error',
+        message: error instanceof Error ? error.message : 'Failed to place bid'
+      });
+    } finally {
+      setIsPlacingBid(false);
+    }
+  }, [pageData?.currentCar, pageData?.currentState?.isLive, bidAmount, minimumBid, isPlacingBid, isConnected, placeLiveBid, addToast]);
+
+  const handlePlacePreBid = useCallback(async () => {
+    if (!pageData?.currentCar || !bidAmount || isPlacingBid) return;
+
+    const amount = parseFloat(bidAmount);
+    
+    // Enhanced validation
+    if (isNaN(amount) || amount <= 0) {
+      addToast({
+        type: 'error',
+        title: 'Invalid Bid Amount',
+        message: 'Please enter a valid bid amount'
+      });
+      return;
+    }
+
+    // Check SignalR connection
+    if (!isConnected) {
+      addToast({
+        type: 'warning',
+        title: 'Connection Required',
+        message: 'Please wait for connection to be established'
+      });
+      return;
+    }
+
+    setIsPlacingBid(true);
+    try {
+      console.log('🎯 Placing pre-bid:', { auctionCarId: pageData.currentCar.id, amount });
+      const success = await placePreBid(pageData.currentCar.id, amount);
+      
+      if (success) {
+        setBidAmount('');
+        addToast({
+          type: 'success',
+          title: 'Pre-Bid Placed',
+          message: `Pre-bid of $${amount.toLocaleString()} placed successfully!`
+        });
+        
+        // Invalidate cache to get fresh data
+        auctionDataService.invalidateCache(pageData.currentCar.id);
+      } else {
+        addToast({
+          type: 'error',
+          title: 'Pre-Bid Failed',
+          message: 'Failed to place pre-bid. Please try again.'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to place pre-bid:', error);
+      addToast({
+        type: 'error',
+        title: 'Pre-Bid Error',
+        message: error instanceof Error ? error.message : 'Failed to place pre-bid'
+      });
+    } finally {
+      setIsPlacingBid(false);
+    }
+  }, [pageData?.currentCar, bidAmount, isPlacingBid, isConnected, placePreBid, addToast]);
+
+  const handlePlaceProxyBid = useCallback(async () => {
+    if (!pageData?.currentCar || !bidAmount || !proxyMaxAmount || isPlacingBid) return;
+
+    const startAmount = parseFloat(bidAmount);
+    const maxAmount = parseFloat(proxyMaxAmount);
+    
+    // Enhanced validation
+    if (isNaN(startAmount) || startAmount <= 0) {
+      addToast({
+        type: 'error',
+        title: 'Invalid Start Amount',
+        message: 'Please enter a valid start amount'
+      });
+      return;
+    }
+
+    if (isNaN(maxAmount) || maxAmount <= 0) {
+      addToast({
+        type: 'error',
+        title: 'Invalid Max Amount',
+        message: 'Please enter a valid maximum amount'
+      });
+      return;
+    }
+    
+    if (maxAmount <= startAmount) {
+      addToast({
+        type: 'error',
+        title: 'Invalid Proxy Bid',
+        message: 'Maximum amount must be greater than start amount'
+      });
+      return;
+    }
+
+    // Check SignalR connection
+    if (!isConnected) {
+      addToast({
+        type: 'warning',
+        title: 'Connection Required',
+        message: 'Please wait for connection to be established'
+      });
+      return;
+    }
+
+    setIsPlacingBid(true);
+    try {
+      console.log('🎯 Placing proxy bid:', { auctionCarId: pageData.currentCar.id, startAmount, maxAmount });
+      const success = await placeProxyBid(pageData.currentCar.id, maxAmount, startAmount);
+      
+      if (success) {
+        setBidAmount('');
+        setProxyMaxAmount('');
+        addToast({
+          type: 'success',
+          title: 'Proxy Bid Placed',
+          message: `Proxy bid with max $${maxAmount.toLocaleString()} placed successfully!`
+        });
+        
+        // Invalidate cache to get fresh data
+        auctionDataService.invalidateCache(pageData.currentCar.id);
+      } else {
+        addToast({
+          type: 'error',
+          title: 'Proxy Bid Failed',
+          message: 'Failed to place proxy bid. Please try again.'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to place proxy bid:', error);
+      addToast({
+        type: 'error',
+        title: 'Proxy Bid Error',
+        message: error instanceof Error ? error.message : 'Failed to place proxy bid'
+      });
+    } finally {
+      setIsPlacingBid(false);
+    }
+  }, [pageData?.currentCar, bidAmount, proxyMaxAmount, isPlacingBid, isConnected, placeProxyBid, addToast]);
+
+  const handleCancelProxyBid = useCallback(async () => {
+    if (!pageData?.currentCar || isPlacingBid) return;
+    
+    // Check SignalR connection
+    if (!isConnected) {
+      addToast({
+        type: 'warning',
+        title: 'Connection Required',
+        message: 'Please wait for connection to be established'
+      });
+      return;
+    }
+    
+    setIsPlacingBid(true);
+    try {
+      console.log('🎯 Cancelling proxy bid:', { auctionCarId: pageData.currentCar.id });
+      const success = await cancelProxyBid(pageData.currentCar.id);
+      
+      if (success) {
+        addToast({
+          type: 'info',
+          title: 'Proxy Bid Cancelled',
+          message: 'Proxy bid has been cancelled successfully!'
+        });
+        
+        // Invalidate cache to get fresh data
+        auctionDataService.invalidateCache(pageData.currentCar.id);
+      } else {
+        addToast({
+          type: 'error',
+          title: 'Cancel Failed',
+          message: 'Failed to cancel proxy bid. Please try again.'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to cancel proxy bid:', error);
+      addToast({
+        type: 'error',
+        title: 'Cancel Error',
+        message: error instanceof Error ? error.message : 'Failed to cancel proxy bid'
+      });
+    } finally {
+      setIsPlacingBid(false);
+    }
+  }, [pageData?.currentCar, isPlacingBid, isConnected, cancelProxyBid, addToast]);
+
+  // Format time helper
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-white/80">Hərrac məlumatları yüklənir...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-6"></div>
+          <h2 className="text-2xl font-bold text-white mb-2">Loading Auction</h2>
+          <p className="text-white/80">Initializing real-time auction data...</p>
         </div>
       </div>
     );
   }
 
-  // Show error state
-  if (error && !auction) {
+  // Error state
+  if (error && !pageData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
         <div className="text-center max-w-2xl mx-auto px-4">
           <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-lg p-8">
-            <Trophy className="h-16 w-16 text-red-400 mx-auto mb-6" />
-            <h2 className="text-2xl font-bold text-white mb-4">Xəta baş verdi</h2>
+            <XCircle className="h-16 w-16 text-red-400 mx-auto mb-6" />
+            <h2 className="text-2xl font-bold text-white mb-4">Error Loading Auction</h2>
             <p className="text-white/80 mb-6">{error}</p>
-            <div className="space-y-2 text-sm text-white/60">
-              <p>• Make sure your backend server is running on https://localhost:7249</p>
-              <p>• Check your internet connection</p>
-              <p>• Try refreshing the page</p>
-            </div>
-            <div className="flex gap-3 mt-6">
               <button
-                onClick={handleRefresh}
+              onClick={initializeAuctionPage}
                 className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
                 Try Again
               </button>
-              <button
-                onClick={() => navigate('/todays-auctions')}
-                className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Back to Today's Auctions
-              </button>
-            </div>
           </div>
         </div>
       </div>
     );
   }
 
+  if (!pageData) return null;
+
+  const { auction, currentState, currentCar, carDetails, highestBid, lotQueue } = pageData;
+  const isLive = currentState.isLive;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
-      {/* Header */}
-      <div className="bg-black/20 backdrop-blur-md border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      {/* Auction Header - Advanced Glassmorphism */}
+      <div className="bg-black/20 backdrop-blur-xl border-b border-white/10 shadow-2xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6">
               <button
                 onClick={() => navigate(-1)}
-                className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+                className="p-3 text-white hover:bg-white/10 rounded-xl transition-all duration-300 hover:scale-105"
               >
-                <ArrowLeft className="h-5 w-5" />
+                <ArrowLeft className="h-6 w-6" />
               </button>
-              <div>
-                <h1 className="text-2xl font-bold text-white">{auction?.name}</h1>
-                <div className="flex items-center gap-4 mt-1">
-                  <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
-                    isAuctionLive ? 'bg-green-500/20 text-green-300' : 'bg-blue-500/20 text-blue-300'
+              
+              <div className="space-y-2">
+                <h1 className="text-3xl font-bold text-white bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+                  {auction.name}
+                </h1>
+                
+                <div className="flex items-center gap-6">
+                  {/* Status Badge */}
+                  <div className={`flex items-center gap-3 px-4 py-2 rounded-full text-sm font-medium backdrop-blur-md border ${
+                    isLive 
+                      ? 'bg-green-500/20 text-green-300 border-green-500/30 shadow-green-500/20' 
+                      : 'bg-blue-500/20 text-blue-300 border-blue-500/30 shadow-blue-500/20'
                   }`}>
-                    <div className={`w-2 h-2 rounded-full ${isAuctionLive ? 'bg-green-400 animate-pulse' : 'bg-blue-400'}`}></div>
-                    {isAuctionLive ? 'Live' : 'Scheduled'}
+                    <div className={`w-3 h-3 rounded-full ${isLive ? 'bg-green-400 animate-pulse' : 'bg-blue-400'}`}></div>
+                    {isLive ? 'LIVE AUCTION' : 'SCHEDULED'}
                   </div>
-                  {auction?.locationName && (
+
+                  {/* Location */}
+                  {auction.locationName && (
                     <div className="flex items-center gap-2 text-white/80">
                       <MapPin className="h-4 w-4" />
-                      {auction.locationName}
+                      <span className="text-sm">{auction.locationName}</span>
                     </div>
                   )}
+
+                  {/* Participants */}
                   <div className="flex items-center gap-2 text-white/80">
-                    {connectionState.isConnected ? (
+                    <Users className="h-4 w-4" />
+                    <span className="text-sm">{currentState.activeBidders || 0} Active</span>
+                  </div>
+
+                  {/* Connection Status */}
+                  <div className="flex items-center gap-2 text-white/80">
+                    {isConnected ? (
                       <Wifi className="h-4 w-4 text-green-400" />
                     ) : (
                       <WifiOff className="h-4 w-4 text-red-400" />
                     )}
                     <span className="text-sm">
-                      {connectionState.isConnected ? 'Connected' : 'Disconnected'}
+                      {isConnected ? 'Connected' : 'Disconnected'}
                     </span>
+                    {lastError && !isConnecting && (
+                      <button
+                        onClick={() => {
+                          if (pageData) {
+                            connect();
+                            joinAuction(pageData.auction.id);
+                            if (pageData.currentCar?.id) {
+                              joinAuctionCar(pageData.currentCar.id);
+                            }
+                          }
+                        }}
+                        className="ml-2 px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 rounded text-xs text-blue-300 hover:text-blue-200 transition-colors"
+                      >
+                        Retry
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* Timer */}
                 {timerSeconds > 0 && (
-                  <div className="mt-2 flex items-center gap-2 text-white/80">
+                  <div className="flex items-center gap-2 text-white/80">
                     <Clock className="h-4 w-4" />
-                    <span className="text-sm font-mono">
-                      {Math.floor(timerSeconds / 60)}:{(timerSeconds % 60).toString().padStart(2, '0')}
+                    <span className="text-lg font-mono font-bold">
+                      {formatTime(timerSeconds)}
                     </span>
-                  </div>
-                )}
-                {error && (
-                  <div className="mt-2 px-3 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded-lg">
-                    <p className="text-yellow-200 text-sm">{error}</p>
+                    <span className="text-sm">remaining</span>
                   </div>
                 )}
               </div>
             </div>
+
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setShowAddVehicleModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                Add Vehicle
-              </button>
-              <button
-                onClick={handleRefresh}
+                onClick={initializeAuctionPage}
                 disabled={loading}
-                className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+                className="p-3 text-white hover:bg-white/10 rounded-xl transition-all duration-300 hover:scale-105 disabled:opacity-50"
               >
                 <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-              <button
-                onClick={() => setShowDebugger(true)}
-                className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
-              >
-                Debug WS
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content - Copart-inspired Layout */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Left Column - Auction Overview */}
-          <div className="lg:col-span-1">
-            <AuctionOverview 
-              auctionId={auction?.id || ''}
-              auctionName={auction?.name || 'Unknown Auction'}
-              startTimeUtc={auction?.startTimeUtc}
-              endTimeUtc={auction?.endTimeUtc}
-              locationId={auction?.locationId}
-              currency={'USD'}
-              isLive={isAuctionLive}
-              stats={{
-                totalVehicles: upcomingCars.length + (currentCar ? 1 : 0),
-                totalRevenue: 0,
-                vehiclesSold: 0,
-                successRate: 0,
-                averagePrice: 0,
-                totalBids: bidStats.totalBids
-              }}
-              onRefresh={handleRefresh}
-              isRefreshing={loading}
-            />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* Left Panel - Car Details & Queue */}
+          <div className="lg:col-span-3 space-y-6">
+            
+            {/* Car Details Panel */}
+            {currentCar && carDetails && (
+              <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <Car className="h-5 w-5" />
+                  Vehicle Details
+                </h3>
+                
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-white/80">
+                        <Hash className="h-4 w-4" />
+                        <span>Lot #{currentCar.lotNumber}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-white/80">
+                        <Calendar className="h-4 w-4" />
+                        <span>{carDetails.year || 'N/A'}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-white/80">
+                        <Gauge className="h-4 w-4" />
+                        <span>{carDetails.odometer?.toLocaleString() || 'N/A'} mi</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-white/80">
+                        <MapPin className="h-4 w-4" />
+                        <span>{carDetails.type || 'N/A'}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-white/80">
+                        <FileText className="h-4 w-4" />
+                        <span>{carDetails.condition || 'N/A'}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-white/80">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span>{carDetails.damageType || 'N/A'}</span>
+                      </div>
+                    </div>
           </div>
 
-          {/* Center Column - Current Vehicle */}
-          <div className="lg:col-span-2">
-            {currentCar ? (
-              <div className="space-y-6">
-                <VehicleCarousel 
-                  carId={currentCar.id}
-                  photos={[]}
-                  autoPlay={true}
-                  showThumbnails={true}
-                  showControls={true}
-                />
-                <LiveBiddingPanel
-                  auctionCarId={currentCar.id}
-                  currentPrice={currentCar.currentPrice || 0}
-                  reservePrice={currentCar.reservePrice}
-                  minimumBid={100}
-                  suggestedAmount={0}
-                  bidCount={bidStats.bidCount}
-                  isActive={isAuctionLive}
-                  isReserveMet={currentCar.isReserveMet || false}
-                  lastBidTime={currentCar.lastBidTime}
-                  stats={bidStats}
-                  onPlaceLiveBid={handlePlaceLiveBid}
-                  onPlacePreBid={handlePlacePreBid}
-                  onPlaceProxyBid={handlePlaceProxyBid}
-                  onCancelProxyBid={handleCancelProxyBid}
-                  isConnected={connectionState.isConnected}
-                />
+                  {carDetails.vin && (
+                    <div className="pt-2 border-t border-white/10">
+                      <div className="flex items-center gap-2 text-white/60 text-xs">
+                        <Hash className="h-3 w-3" />
+                        <span>VIN: {carDetails.vin}</span>
+                      </div>
+                    </div>
+                  )}
               </div>
-            ) : (
-              <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-lg p-8 text-center">
-                <Trophy className="h-16 w-16 text-white/60 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-white mb-2">No Vehicle Available</h3>
-                <p className="text-white/80">No vehicles are currently available for this auction.</p>
               </div>
             )}
-          </div>
 
-          {/* Right Column - Upcoming Vehicles & Bid History */}
-          <div className="lg:col-span-1 space-y-6">
-            {upcomingCars.length > 0 && (
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-4">Upcoming Vehicles</h3>
-                <div className="space-y-3">
-                  {upcomingCars.map((car) => (
+            {/* Lot Queue */}
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <Trophy className="h-5 w-5" />
+                Lot Queue
+              </h3>
+              
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {lotQueue.slice(0, 6).map((car, index) => (
                     <div
                       key={car.id}
-                      className="bg-white/10 backdrop-blur-md border border-white/20 rounded-lg p-4 cursor-pointer hover:bg-white/20 transition-colors"
-                      onClick={() => setCurrentCar(car as AuctionCarDetailDto)}
-                    >
-                      <h4 className="font-medium text-white">Lot #{car.lotNumber}</h4>
-                      <p className="text-sm text-white/80">Vehicle #{car.id}</p>
+                    className={`p-3 rounded-xl transition-all duration-300 cursor-pointer ${
+                      car.id === currentCar?.id
+                        ? 'bg-blue-500/20 border border-blue-500/30'
+                        : 'bg-white/5 hover:bg-white/10 border border-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium text-white">
+                          Lot #{car.lotNumber}
+                        </div>
+                        <div className="text-xs text-white/60">
+                          Vehicle #{car.id}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-white">
+                          ${car.currentPrice?.toLocaleString() || '0'}
+                        </div>
+                        <div className="text-xs text-white/60">
+                          {index === 0 ? 'Now' : `${index * 2}min`}
+                        </div>
+                      </div>
                     </div>
-                  ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Center Panel - Main Stage */}
+          <div className="lg:col-span-6 space-y-6">
+            
+            {/* Car Gallery */}
+            {currentCar && carDetails && (
+              <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+                <div className="space-y-4">
+                  {/* Main Image */}
+                  <div className="relative aspect-video bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl overflow-hidden">
+                    {carDetails.imageUrls && carDetails.imageUrls.length > 0 ? (
+                      <img
+                        src={carDetails.imageUrls[0]}
+                        alt={`${carDetails.make} ${carDetails.model}`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full">
+                        <Camera className="h-16 w-16 text-white/40" />
+                      </div>
+                    )}
+                    
+                    {/* Reserve Status */}
+                    {currentCar.isReserveMet && (
+                      <div className="absolute top-4 right-4 bg-green-500/20 backdrop-blur-md border border-green-500/30 rounded-lg px-3 py-1">
+                        <div className="flex items-center gap-2 text-green-300 text-sm font-medium">
+                          <CheckCircle className="h-4 w-4" />
+                          Reserve Met
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Thumbnails */}
+                  {carDetails.imageUrls && carDetails.imageUrls.length > 1 && (
+                    <div className="flex gap-2 overflow-x-auto">
+                      {carDetails.imageUrls.slice(1, 5).map((image: string, index: number) => (
+                        <img
+                          key={index}
+                          src={image}
+                          alt={`Vehicle ${index + 2}`}
+                          className="w-20 h-16 object-cover rounded-lg flex-shrink-0"
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
             
-            <BidHistory 
-              auctionCarId={currentCar?.id || ''}
-              bids={bidHistory}
-              onRefresh={handleRefreshBidHistory}
-              isRefreshing={loading}
-              isConnected={connectionState.isConnected}
-              currentUserId={currentUserId}
-            />
+            {/* Bid Circle & History */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* Bid Circle */}
+              <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  Current Bid
+                </h3>
+                
+                <div className="text-center">
+                  <div className={`w-32 h-32 mx-auto rounded-full flex items-center justify-center border-4 ${
+                    timerSeconds <= 30 && timerSeconds > 0
+                      ? 'border-red-500 animate-pulse bg-red-500/10'
+                      : 'border-blue-500 bg-blue-500/10'
+                  }`}>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-white">
+                        ${highestBid?.amount?.toLocaleString() || currentCar?.currentPrice?.toLocaleString() || '0'}
+                      </div>
+                      <div className="text-xs text-white/60 mt-1">
+                        {highestBid?.bidderName || 'No bids'}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 space-y-2">
+                    <div className="text-sm text-white/80">
+                      Bid Count: {currentCar?.bidCount || 0}
+                    </div>
+                    <div className="text-sm text-white/80">
+                      Reserve: ${currentCar?.reservePrice?.toLocaleString() || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bid History */}
+              <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Recent Bids
+                </h3>
+                
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {bidHistory.slice(0, 5).map((bid) => (
+                    <div key={bid.id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                        <span className="text-sm text-white/80">{bid.userName}</span>
+                      </div>
+                      <span className="text-sm font-bold text-white">
+                        ${bid.amount.toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+                  
+                  {bidHistory.length === 0 && (
+                    <div className="text-center text-white/60 text-sm py-4">
+                      No bids yet
+                    </div>
+                  )}
+                </div>
           </div>
         </div>
       </div>
 
-      {/* Add Vehicle Modal */}
-      <AddVehicleModal
-        isOpen={showAddVehicleModal}
-        onClose={() => setShowAddVehicleModal(false)}
-        auctionId={auction?.id || ''}
-        onSuccess={() => handleVehicleAdded({})}
-      />
+          {/* Right Panel - Bidding Actions */}
+          <div className="lg:col-span-3">
+            <div className={`bg-white/5 backdrop-blur-xl border rounded-2xl p-6 shadow-2xl transition-all duration-500 ${
+              isLive 
+                ? 'border-green-500/30 shadow-green-500/20' 
+                : 'border-white/10'
+            }`}>
+              
+              <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+                <Zap className="h-5 w-5" />
+                Bidding Actions
+              </h3>
 
-      {/* BidHub Debugger */}
-      {showDebugger && (
-        <BidHubDebugger onClose={() => setShowDebugger(false)} />
-      )}
+              {/* Bid Tabs */}
+              <div className="flex gap-2 mb-6">
+                {[
+                  { key: 'live', label: 'Live Bid', icon: Play },
+                  { key: 'prebid', label: 'Pre-Bid', icon: Pause },
+                  { key: 'proxy', label: 'Proxy Bid', icon: Target }
+                ].map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => setActiveBidTab(key as BidTab)}
+                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                      activeBidTab === key
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                        : 'bg-white/5 text-white/60 hover:bg-white/10'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Bid Forms */}
+              <div className="space-y-4">
+                
+                {/* Live Bid */}
+                {activeBidTab === 'live' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Bid Amount
+                      </label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white/60" />
+                        <input
+                          type="number"
+                          value={bidAmount}
+                          onChange={(e) => setBidAmount(e.target.value)}
+                          placeholder={minimumBid > 0 ? `Min: $${minimumBid.toLocaleString()}` : 'Enter amount'}
+                          className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                        />
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={handlePlaceLiveBid}
+                      disabled={!bidAmount || isPlacingBid || !isLive}
+                      className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 hover:scale-105 disabled:hover:scale-100 flex items-center justify-center gap-2"
+                    >
+                      {isPlacingBid ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Zap className="h-5 w-5" />
+                      )}
+                      Place Live Bid
+                    </button>
+                  </div>
+                )}
+
+                {/* Pre-Bid */}
+                {activeBidTab === 'prebid' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Pre-Bid Amount
+                      </label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white/60" />
+                        <input
+                          type="number"
+                          value={bidAmount}
+                          onChange={(e) => setBidAmount(e.target.value)}
+                          placeholder="Enter amount"
+                          className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                        />
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={handlePlacePreBid}
+                      disabled={!bidAmount || isPlacingBid}
+                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 hover:scale-105 disabled:hover:scale-100 flex items-center justify-center gap-2"
+                    >
+                      {isPlacingBid ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Pause className="h-5 w-5" />
+                      )}
+                      Place Pre-Bid
+                    </button>
+                  </div>
+                )}
+
+                {/* Proxy Bid */}
+                {activeBidTab === 'proxy' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Start Amount
+                      </label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white/60" />
+                        <input
+                          type="number"
+                          value={bidAmount}
+                          onChange={(e) => setBidAmount(e.target.value)}
+                          placeholder="Enter start amount"
+                          className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Maximum Amount
+                      </label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white/60" />
+                        <input
+                          type="number"
+                          value={proxyMaxAmount}
+                          onChange={(e) => setProxyMaxAmount(e.target.value)}
+                          placeholder="Enter max amount"
+                          className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handlePlaceProxyBid}
+                        disabled={!bidAmount || !proxyMaxAmount || isPlacingBid}
+                        className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 hover:scale-105 disabled:hover:scale-100 flex items-center justify-center gap-2"
+                      >
+                        {isPlacingBid ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Target className="h-5 w-5" />
+                        )}
+                        Place Proxy
+                      </button>
+                      
+                      <button
+                        onClick={handleCancelProxyBid}
+                        disabled={isPlacingBid}
+                        className="px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-all duration-300 hover:scale-105 disabled:hover:scale-100"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Auction Status */}
+              <div className="mt-6 pt-6 border-t border-white/10">
+                <div className="text-center">
+                  <div className={`text-sm font-medium ${
+                    isLive ? 'text-green-300' : 'text-blue-300'
+                  }`}>
+                    {isLive ? 'Auction is LIVE' : 'Auction is SCHEDULED'}
+                  </div>
+                  <div className="text-xs text-white/60 mt-1">
+                    {isLive ? 'Bids are being accepted' : 'Pre-bids only'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Connection Error Display */}
+          {lastError && (
+            <div className="mt-6 bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-xl p-4">
+              <div className="flex items-center gap-3">
+                <WifiOff className="h-5 w-5 text-red-400" />
+                <div className="flex-1">
+                  <h4 className="text-red-300 font-medium mb-1">Connection Error</h4>
+                  <p className="text-red-200/80 text-sm">{lastError}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (pageData) {
+                      connect();
+                      joinAuction(pageData.auction.id);
+                      if (pageData.currentCar?.id) {
+                        joinAuctionCar(pageData.currentCar.id);
+                      }
+                    }
+                  }}
+                  disabled={isConnecting}
+                  className="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 rounded-lg text-red-300 hover:text-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isConnecting ? 'Connecting...' : 'Retry Connection'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

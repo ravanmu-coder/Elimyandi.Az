@@ -37,7 +37,9 @@ namespace AutoriaFinal.Domain.Repositories.Auctions
         Task<IEnumerable<Bid>> GetExpiredProxyBidsAsync();
         Task<IEnumerable<Bid>> GetProxyBidsForProcessingAsync(Guid auctionCarId, decimal currentAmount);
         Task<IEnumerable<Bid>> GetChildBidsAsync(Guid parentBidId);
-
+        Task<int> GetMaxSequenceNumberAsync(Guid auctionCarId);
+        Task<bool> HasActiveProxyBidAsync(Guid userId, Guid auctionCarId);
+        Task<IEnumerable<Bid>> GetProxyBidsAboveAmountAsync(Guid auctionCarId, decimal amount);
         // STATİSTİKA VƏ ANALİZ
         Task<IEnumerable<Bid>> GetTopBiddersAsync(Guid auctionId, int count = 10);
         Task<decimal> GetAverageBidAmountAsync(Guid auctionCarId);

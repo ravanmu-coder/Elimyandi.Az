@@ -148,15 +148,16 @@ export const LiveBiddingPanel: React.FC<LiveBiddingPanelProps> = ({
   };
 
   const handlePlaceBid = async () => {
+    console.log('handlePlaceBid');
     if (!isConnected) {
       setError('Not connected to auction. Please refresh the page.');
       return;
     }
 
-    if (!isActive) {
-      setError('Auction is not currently active.');
-      return;
-    }
+    // if (!isActive) {
+    //   setError('Auction is not currently active.');
+    //   return;
+    // }
 
     const amount = parseFloat(bidAmount);
     if (isNaN(amount)) {
@@ -465,12 +466,12 @@ export const LiveBiddingPanel: React.FC<LiveBiddingPanelProps> = ({
       <div className="space-y-2">
         <button
           onClick={handlePlaceBid}
-          disabled={isBidButtonDisabled()}
-          className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
-            isBidButtonDisabled()
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
+          // disabled={isBidButtonDisabled()}
+          // className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
+          //   isBidButtonDisabled()
+          //     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          //     : 'bg-blue-600 text-white hover:bg-blue-700'
+          // }`}
         >
           {isPlacingBid ? (
             <div className="flex items-center justify-center gap-2">

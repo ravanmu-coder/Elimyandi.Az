@@ -83,7 +83,17 @@ class ApiClient {
       if (!response.ok) {
         const errorText = await response.text()
         console.error(`Admin API Error: ${response.status} - ${errorText}`)
-        throw new Error(`API Error: ${response.status} - ${errorText}`)
+        
+        // Try to parse JSON error response
+        try {
+          const errorJson = JSON.parse(errorText)
+          // Extract the detail message if available
+          const errorMessage = errorJson.detail || errorJson.message || errorJson.title || errorText
+          throw new Error(errorMessage)
+        } catch (parseError) {
+          // If parsing fails, use the raw error text
+          throw new Error(errorText)
+        }
       }
 
       const contentType = response.headers.get('Content-Type')
@@ -233,6 +243,37 @@ class ApiClient {
     }
   }
 
+  // New dashboard stats endpoint
+  async getDashboardStats() {
+    try {
+      return this.request<any>('/api/auction/dashboard-stats')
+    } catch (error) {
+      console.error('Error getting dashboard stats:', error)
+      throw error
+    }
+  }
+
+  // Scheduler debug endpoints
+  async getSchedulerDebug() {
+    try {
+      return this.request<any>('/api/auction/scheduler-debug')
+    } catch (error) {
+      console.error('Error getting scheduler debug:', error)
+      throw error
+    }
+  }
+
+  async forceSchedulerRun() {
+    try {
+      return this.request<any>('/api/auction/force-scheduler-run', {
+        method: 'POST'
+      })
+    } catch (error) {
+      console.error('Error forcing scheduler run:', error)
+      throw error
+    }
+  }
+
   async getRecentActivity() {
     try {
       // Get recent activity from auctions and bids
@@ -307,6 +348,7 @@ class ApiClient {
     page?: number
     limit?: number
     status?: string
+    search?: string
     region?: string
     dateFrom?: string
     dateTo?: string
@@ -316,8 +358,11 @@ class ApiClient {
       const queryParams = new URLSearchParams()
       
       if (params?.status) queryParams.append('status', params.status)
+      if (params?.search) queryParams.append('search', params.search)
       if (params?.page) queryParams.append('page', params.page.toString())
       if (params?.limit) queryParams.append('limit', params.limit.toString())
+      if (params?.dateFrom) queryParams.append('dateFrom', params.dateFrom)
+      if (params?.dateTo) queryParams.append('dateTo', params.dateTo)
       
       if (queryParams.toString()) {
         endpoint += `?${queryParams.toString()}`
@@ -428,6 +473,18 @@ class ApiClient {
       })
     } catch (error) {
       console.error('Error moving to next car:', error)
+      throw error
+    }
+  }
+
+  // New auction lifecycle methods
+  async makeAuctionReady(id: string) {
+    try {
+      return this.request<any>(`/api/auction/${id}/make-ready`, {
+        method: 'POST',
+      })
+    } catch (error) {
+      console.error('Error making auction ready:', error)
       throw error
     }
   }
@@ -1184,6 +1241,47 @@ class ApiClient {
       throw error
     }
   }
+
+  // Additional methods for the new components
+  async getAuction(id: string): Promise<any> {
+    return this.getAuctionById(id)
+  }
+
+  async getAuctionStatistics(id: string): Promise<any> {
+    try {
+      return this.request<any>(`/api/auction/${id}/statistics`)
+    } catch (error) {
+      console.error('Error getting auction statistics:', error)
+      // Return mock data if endpoint doesn't exist
+      return {
+        totalVehicles: 0,
+        totalRevenue: 0,
+        averageBid: 0,
+        highestBid: 0,
+        totalBids: 0
+      }
+    }
+  }
+
+
+  async getCars(): Promise<any[]> {
+    try {
+      const response = await this.getVehicles({ pageSize: 1000 })
+      return response.items
+    } catch (error) {
+      console.error('Error getting cars:', error)
+      return []
+    }
+  }
+
+  async addCarToAuction(auctionId: string, data: any): Promise<void> {
+    return this.createAuctionCar({
+      auctionId,
+      ...data
+    })
+  }
+
+  // Note: getLocations and createAuction methods already exist above
 
   // Enum metadata endpoint
   async getEnums() {

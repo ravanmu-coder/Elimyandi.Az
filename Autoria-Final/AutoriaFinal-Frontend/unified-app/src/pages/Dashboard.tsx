@@ -415,7 +415,7 @@ export default function Dashboard() {
                 Aktiv Hərraclar
               </h2>
               <Link 
-                to="/auctions?filter=live" 
+                to="/all-auctions" 
                 className="text-blue-400 hover:text-blue-300 text-sm font-medium flex items-center"
               >
                 Hamısını gör
@@ -435,7 +435,7 @@ export default function Dashboard() {
                       to={`/auctions/${auction.id}`}
                       className="px-3 py-1 bg-blue-600/80 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
                     >
-                      Qoşul
+                      Bax
                     </Link>
                   </div>
                 </div>
@@ -446,7 +446,7 @@ export default function Dashboard() {
                   <h3 className="text-lg font-medium text-white mb-2">Aktiv hərrac yoxdur</h3>
                   <p className="text-slate-400 mb-4">Hal-hazırda aktiv hərrac yoxdur.</p>
                   <Link 
-                    to="/auctions" 
+                    to="/all-auctions" 
                     className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     Bütün hərracları gör
@@ -565,7 +565,7 @@ export default function Dashboard() {
                   Bid verməyə başlayın ki, fəaliyyətinizi burada görəsiniz.
                 </p>
                 <Link
-                  to="/auctions"
+                  to="/all-auctions"
                   className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                 >
                   Hərracları gör

@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
 import { 
   Filter, 
   Grid3X3, 
@@ -11,12 +10,16 @@ import {
   User,
   Car,
   AlertCircle,
-  ChevronDown,
-  X,
   RefreshCw,
   Settings,
-  Tag
+  Tag,
+  Loader2
 } from 'lucide-react'
+import { Button } from '../components/common/Button'
+import { Pagination } from '../components/common/Pagination'
+import { VehicleCard } from '../components/VehicleCard'
+import { VehicleTableRow } from '../components/VehicleTableRow'
+import { VehicleDetailModal } from '../components/VehicleDetailModal'
 import { apiClient } from '../services/apiClient'
 import { useEnums, getEnumLabel, getEnumBadgeClasses } from '../../services/enumService'
 
@@ -66,21 +69,23 @@ interface Filters {
 }
 
 export function InventoryPage() {
-  const navigate = useNavigate()
   const { enums } = useEnums()
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
-  const [showFilters, setShowFilters] = useState(true)
-  const [showDetailDrawer, setShowDetailDrawer] = useState(false)
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
+  
+  // Core state management
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalItems, setTotalItems] = useState(0)
+  
+  // View and UI state
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
+  const [showFilters, setShowFilters] = useState(true)
   const [showMobileFilters, setShowMobileFilters] = useState(false)
   
+  // Search and filter state (UI only - no automatic API calls)
+  const [searchTerm, setSearchTerm] = useState('')
   const [filters, setFilters] = useState<Filters>({
     condition: '',
     vehicleType: '',
@@ -94,14 +99,18 @@ export function InventoryPage() {
     location: '',
     seller: ''
   })
+  
+  // CRITICAL: Manual refresh trigger to prevent infinite loops
+  const [refreshKey, setRefreshKey] = useState(0)
+  
+  // Modal state
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null)
 
   const pageSize = 12
 
-  useEffect(() => {
-    loadVehicles()
-  }, [currentPage, searchTerm, filters])
-
-  const loadVehicles = async () => {
+  // Data loading function - only triggered by refreshKey changes
+  const loadVehicles = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -127,25 +136,11 @@ export function InventoryPage() {
       })
 
       console.log('API response received:', response)
-      console.log('Number of items:', response.items?.length || 0)
 
       // Transform API data to our Vehicle interface
       const transformedVehicles: Vehicle[] = response.items.map((car: any) => {
-        console.log('Processing car:', car)
-        console.log('Car image data:', {
-          imagePath: car.imagePath,
-          imageUrls: car.imageUrls,
-          photoUrls: car.photoUrls,
-          images: car.images,
-          primaryImage: car.primaryImage
-        })
-        
         const processedImageUrls = apiClient.processImageUrls(car)
-        console.log('Processed image URLs:', processedImageUrls)
-        
-        // Get the primary image URL (first available image)
         const primaryImageUrl = processedImageUrls.length > 0 ? processedImageUrls[0] : null
-        console.log('Primary image URL for card:', primaryImageUrl)
         
         return {
           id: car.id,
@@ -177,9 +172,6 @@ export function InventoryPage() {
           region: car.region || 'North America'
         }
       })
-
-      console.log('Transformed vehicles:', transformedVehicles)
-      console.log('Number of transformed vehicles:', transformedVehicles.length)
       
       setVehicles(transformedVehicles)
       setTotalPages(response.totalPages)
@@ -187,7 +179,6 @@ export function InventoryPage() {
     } catch (error) {
       console.error('Error loading vehicles:', error)
       
-      // Show specific error message for authentication
       if (error instanceof Error && error.message.includes('Authentication failed')) {
         setError('Authentication failed. Please login first using the Login button.')
       } else {
@@ -197,14 +188,35 @@ export function InventoryPage() {
     } finally {
       setLoading(false)
     }
+  }, [currentPage, pageSize, viewMode, searchTerm, filters])
+
+  // CRITICAL: Only trigger data loading when refreshKey changes
+  useEffect(() => {
+    loadVehicles()
+  }, [refreshKey]) // DİQQƏT: Asılılıq massivində YALNIZ "refreshKey" olmalıdır!
+
+  // Manual refresh trigger
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1)
+  }
+
+  // Search and filter handlers (UI only)
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value)
   }
 
   const handleFilterChange = (key: keyof Filters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }))
-    setCurrentPage(1)
   }
 
-  const clearFilters = () => {
+  // Apply search and filters (manual trigger)
+  const handleApplyFilters = () => {
+    setCurrentPage(1)
+    setRefreshKey(prev => prev + 1)
+  }
+
+  // Clear filters and refresh
+  const handleClearFilters = () => {
     setFilters({
       condition: '',
       vehicleType: '',
@@ -218,57 +230,83 @@ export function InventoryPage() {
       location: '',
       seller: ''
     })
+    setSearchTerm('')
     setCurrentPage(1)
+    setRefreshKey(prev => prev + 1)
   }
 
-  const handleViewDetails = (vehicle: Vehicle) => {
-    // Navigate to VehicleFinder page with the vehicle ID as a search parameter
-    navigate(`/vehicle-finder?search=${vehicle.vin || vehicle.id}`)
+  // Page change handler
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    setRefreshKey(prev => prev + 1)
+  }
+
+  // View details handler
+  const handleViewDetails = (vehicleId: string) => {
+    setSelectedVehicleId(vehicleId)
+    setShowDetailModal(true)
+  }
+
+  // Login handler for testing
+  const handleLogin = async () => {
+    try {
+      const email = 'admin@example.com'
+      const password = 'admin123'
+      
+      console.log('Attempting login...')
+      const result = await apiClient.login(email, password)
+      console.log('Login successful:', result)
+      
+      // Reload vehicles after successful login
+      setTimeout(() => handleRefresh(), 1000)
+    } catch (error) {
+      console.error('Login failed:', error)
+      alert('Login failed. Please check your credentials.')
+    }
   }
 
   const getStatusBadgeColor = (status: string) => {
-    // Use enum service for consistent styling
     const badgeClasses = getEnumBadgeClasses('CarCondition', status)
     return badgeClasses
   }
 
   const FilterPanel = () => (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
-              <button 
-          onClick={clearFilters}
-          className="text-sm text-blue-600 hover:text-blue-700"
-              >
+    <div className="bg-dark-bg-quaternary rounded-lg border border-dark-border p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-h3 font-heading text-dark-text-primary">Filters</h3>
+        <button 
+          onClick={handleClearFilters}
+          className="text-body-sm text-accent-primary hover:text-accent-primary/80"
+        >
           Clear All
-              </button>
-            </div>
-            
-            <div className="space-y-6">
+        </button>
+      </div>
+      
+      <div className="space-y-6">
         {/* Condition */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Condition</label>
-                <select 
-                  value={filters.condition}
-                  onChange={(e) => handleFilterChange('condition', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Conditions</option>
-                  <option value="Excellent">Excellent</option>
-                  <option value="Good">Good</option>
-                  <option value="Fair">Fair</option>
-                  <option value="Poor">Poor</option>
+        <div>
+          <label className="block text-body-sm font-medium text-dark-text-primary mb-2">Condition</label>
+          <select 
+            value={filters.condition}
+            onChange={(e) => handleFilterChange('condition', e.target.value)}
+            className="w-full px-3 py-2 bg-dark-bg-tertiary border border-dark-border rounded-lg text-dark-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary"
+          >
+            <option value="">All Conditions</option>
+            <option value="Excellent">Excellent</option>
+            <option value="Good">Good</option>
+            <option value="Fair">Fair</option>
+            <option value="Poor">Poor</option>
             <option value="Salvage">Salvage</option>
-                </select>
-              </div>
+          </select>
+        </div>
 
         {/* Vehicle Type */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Type</label>
+        <div>
+          <label className="block text-body-sm font-medium text-dark-text-primary mb-2">Vehicle Type</label>
           <select
             value={filters.vehicleType}
             onChange={(e) => handleFilterChange('vehicleType', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 bg-dark-bg-tertiary border border-dark-border rounded-lg text-dark-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary"
           >
             <option value="">All Types</option>
             <option value="Sedan">Sedan</option>
@@ -278,58 +316,58 @@ export function InventoryPage() {
             <option value="Convertible">Convertible</option>
             <option value="Hatchback">Hatchback</option>
             <option value="Wagon">Wagon</option>
-                </select>
-              </div>
+          </select>
+        </div>
 
-              {/* Year Range */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Year Range</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <input 
-                    type="number" 
-                    placeholder="From" 
+        {/* Year Range */}
+        <div>
+          <label className="block text-body-sm font-medium text-dark-text-primary mb-2">Year Range</label>
+          <div className="grid grid-cols-2 gap-2">
+            <input 
+              type="number" 
+              placeholder="From" 
               value={filters.yearFrom}
               onChange={(e) => handleFilterChange('yearFrom', e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <input 
-                    type="number" 
-                    placeholder="To" 
+              className="px-3 py-2 bg-dark-bg-tertiary border border-dark-border rounded-lg text-dark-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary"
+            />
+            <input 
+              type="number" 
+              placeholder="To" 
               value={filters.yearTo}
               onChange={(e) => handleFilterChange('yearTo', e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
+              className="px-3 py-2 bg-dark-bg-tertiary border border-dark-border rounded-lg text-dark-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary"
+            />
+          </div>
+        </div>
 
-              {/* Mileage Range */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Mileage Range</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <input 
-                    type="number" 
+        {/* Mileage Range */}
+        <div>
+          <label className="block text-body-sm font-medium text-dark-text-primary mb-2">Mileage Range</label>
+          <div className="grid grid-cols-2 gap-2">
+            <input 
+              type="number" 
               placeholder="From"
               value={filters.mileageFrom}
               onChange={(e) => handleFilterChange('mileageFrom', e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <input 
-                    type="number" 
+              className="px-3 py-2 bg-dark-bg-tertiary border border-dark-border rounded-lg text-dark-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary"
+            />
+            <input 
+              type="number" 
               placeholder="To"
               value={filters.mileageTo}
               onChange={(e) => handleFilterChange('mileageTo', e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
+              className="px-3 py-2 bg-dark-bg-tertiary border border-dark-border rounded-lg text-dark-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary"
+            />
+          </div>
+        </div>
 
-              {/* Damage Type */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Damage Type</label>
+        {/* Damage Type */}
+        <div>
+          <label className="block text-body-sm font-medium text-dark-text-primary mb-2">Damage Type</label>
           <select
             value={filters.damageType}
             onChange={(e) => handleFilterChange('damageType', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 bg-dark-bg-tertiary border border-dark-border rounded-lg text-dark-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary"
           >
             <option value="">All Damage Types</option>
             <option value="None">None</option>
@@ -340,247 +378,78 @@ export function InventoryPage() {
             <option value="Water/Flood">Water/Flood</option>
             <option value="Hail">Hail</option>
             <option value="Vandalism">Vandalism</option>
-                </select>
-              </div>
+          </select>
+        </div>
 
-              {/* Make */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Make</label>
+        {/* Make */}
+        <div>
+          <label className="block text-body-sm font-medium text-dark-text-primary mb-2">Make</label>
           <input
             type="text"
             placeholder="Search make..."
             value={filters.make}
             onChange={(e) => handleFilterChange('make', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 bg-dark-bg-tertiary border border-dark-border rounded-lg text-dark-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary"
           />
-              </div>
+        </div>
 
-              {/* Model */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Model</label>
+        {/* Model */}
+        <div>
+          <label className="block text-body-sm font-medium text-dark-text-primary mb-2">Model</label>
           <input
             type="text"
             placeholder="Search model..."
             value={filters.model}
             onChange={(e) => handleFilterChange('model', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 bg-dark-bg-tertiary border border-dark-border rounded-lg text-dark-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary"
           />
-              </div>
+        </div>
 
-              {/* Location */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
+        {/* Location */}
+        <div>
+          <label className="block text-body-sm font-medium text-dark-text-primary mb-2">Location</label>
           <input
             type="text"
             placeholder="Search location..."
             value={filters.location}
             onChange={(e) => handleFilterChange('location', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 bg-dark-bg-tertiary border border-dark-border rounded-lg text-dark-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary"
           />
-              </div>
+        </div>
 
-              {/* Seller */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Seller</label>
-                  <input
-                    type="text"
+        {/* Seller */}
+        <div>
+          <label className="block text-body-sm font-medium text-dark-text-primary mb-2">Seller</label>
+          <input
+            type="text"
             placeholder="Search seller..."
             value={filters.seller}
             onChange={(e) => handleFilterChange('seller', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-              </div>
-            </div>
-          </div>
-  )
-
-  const VehicleCard = ({ vehicle }: { vehicle: Vehicle }) => (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-      {/* Image */}
-      <div className="relative h-32 sm:h-40 md:h-48 lg:h-52 xl:h-56 bg-gray-100 overflow-hidden">
-        {vehicle.imagePath ? (
-          <img
-            src={vehicle.imagePath}
-            alt={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-            className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-            onError={(e) => {
-              console.log('Card image failed to load:', vehicle.imagePath)
-              e.currentTarget.style.display = 'none'
-              const fallback = e.currentTarget.nextElementSibling as HTMLElement
-              if (fallback) fallback.classList.remove('hidden')
-            }}
-            onLoad={() => {
-              console.log('Card image loaded successfully:', vehicle.imagePath)
-            }}
+            className="w-full px-3 py-2 bg-dark-bg-tertiary border border-dark-border rounded-lg text-dark-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary"
           />
-        ) : null}
-        <div className={`absolute inset-0 bg-gray-200 flex items-center justify-center ${vehicle.imagePath ? 'hidden' : ''}`}>
-          <div className="text-center text-gray-500">
-            <div className="text-xs sm:text-sm font-medium">No Image</div>
-            <div className="text-xs">Available</div>
-                </div>
-              </div>
+        </div>
 
-        {/* Status Badge */}
-        <div className="absolute top-2 right-2">
-          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadgeColor(vehicle.status)}`}>
-            {getEnumLabel('CarCondition', vehicle.status, enums)}
-          </span>
-            </div>
-          </div>
-
-          {/* Content */}
-      <div className="p-3 sm:p-4">
-        {/* VIN */}
-        <div className="flex items-center gap-1 sm:gap-2 mb-2">
-          <Tag className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400 flex-shrink-0" />
-          <span className="text-xs text-gray-500 font-mono truncate">{vehicle.vin}</span>
-                  </div>
-                  
-        {/* Title */}
-        <h3 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
-          {vehicle.year} {vehicle.make} {vehicle.model}
-        </h3>
-        
-        {/* Additional Info */}
-        <div className="text-xs sm:text-sm text-gray-600 mb-2">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0 mb-1">
-            <span className="truncate"><span className="font-medium">Condition:</span> {getEnumLabel('CarCondition', vehicle.condition, enums)}</span>
-            <span className="truncate"><span className="font-medium">Mileage:</span> {vehicle.odometer?.toLocaleString()} {vehicle.odometerUnit}</span>
-                      </div>
-          {vehicle.damageType && vehicle.damageType !== 'None' && (
-            <div className="text-xs text-orange-600">
-              <span className="font-medium">Damage:</span> {getEnumLabel('DamageType', vehicle.damageType, enums)}
-                      </div>
-          )}
-                    </div>
-                    
-        {/* Meta */}
-        <div className="space-y-1 mb-3 sm:mb-4">
-          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-600">
-            <User className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-            <span className="truncate">{vehicle.ownerName}</span>
-                  </div>
-          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-600">
-            <MapPin className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-            <span className="truncate">{vehicle.locationName}</span>
-                </div>
-            </div>
-                    
-        {/* Action */}
-              <button 
-          onClick={() => handleViewDetails(vehicle)}
-          className="w-full py-2 px-3 sm:px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-1 sm:gap-2"
-              >
-          <Eye className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-          <span className="hidden sm:inline">View in Finder</span>
-          <span className="sm:hidden">Finder</span>
-              </button>
-            </div>
-              </div>
-  )
-
-  const VehicleTableRow = ({ vehicle }: { vehicle: Vehicle }) => (
-    <tr className="hover:bg-gray-50">
-      {/* Image */}
-      <td className="px-3 sm:px-6 py-3 sm:py-4">
-        <div className="w-12 h-8 sm:w-16 sm:h-12 bg-gray-100 rounded-md overflow-hidden">
-          {vehicle.imagePath ? (
-            <img
-              src={vehicle.imagePath}
-              alt={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-              className="w-full h-full object-cover transition-transform duration-200 hover:scale-105"
-                              onError={(e) => {
-                console.log('Table image failed to load:', vehicle.imagePath)
-                e.currentTarget.style.display = 'none'
-                e.currentTarget.nextElementSibling?.classList.remove('hidden')
-              }}
-              onLoad={() => {
-                console.log('Table image loaded successfully:', vehicle.imagePath)
-              }}
-            />
-          ) : null}
-          <div className={`w-full h-full bg-gray-200 flex items-center justify-center ${vehicle.imagePath ? 'hidden' : ''}`}>
-            <div className="text-xs text-gray-500 text-center">
-              <div>No</div>
-              <div>Image</div>
-                        </div>
-                      </div>
-                    </div>
-      </td>
-
-      {/* Sale Time */}
-      <td className="px-6 py-4 text-sm text-gray-900">
-        {vehicle.saleTime ? new Date(vehicle.saleTime).toLocaleDateString() : 'TBD'}
-                        </td>
-
-      {/* Sale Name */}
-      <td className="px-6 py-4 text-sm text-gray-900">
-        {vehicle.auctionName || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-                        </td>
-
-      {/* Region */}
-      <td className="px-6 py-4 text-sm text-gray-900">
-        {vehicle.region}
-      </td>
-
-      {/* Highlights */}
-      <td className="px-6 py-4 text-sm text-gray-900">
-        <div className="flex flex-wrap gap-1">
-          {vehicle.highlights?.slice(0, 2).map((highlight, index) => (
-            <span key={index} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-              {highlight}
-                        </span>
-          ))}
-          {vehicle.highlights && vehicle.highlights.length > 2 && (
-            <span className="text-xs text-gray-500">+{vehicle.highlights.length - 2}</span>
-          )}
-                      </div>
-                        </td>
-
-      {/* Current Sale */}
-      <td className="px-6 py-4 text-sm text-gray-900">
-        {vehicle.saleTime ? new Date(vehicle.saleTime).toLocaleDateString() : 'TBD'}
-      </td>
-
-      {/* Next Sale */}
-      <td className="px-6 py-4 text-sm text-gray-900">
-        {vehicle.nextSale ? new Date(vehicle.nextSale).toLocaleDateString() : 'TBD'}
-      </td>
-
-      {/* Status */}
-      <td className="px-6 py-4">
-        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadgeColor(vehicle.status)}`}>
-          {getEnumLabel('CarCondition', vehicle.status, enums)}
-        </span>
-                        </td>
-
-      {/* Action */}
-      <td className="px-6 py-4">
-                    <button 
-          onClick={() => handleViewDetails(vehicle)}
-          className="text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                    >
-                            <Eye className="w-4 h-4" />
-          View in Finder
-                    </button>
-                        </td>
-                    </tr>
+        {/* Apply Filters Button */}
+        <Button onClick={handleApplyFilters} className="w-full">
+          Apply Filters
+        </Button>
+      </div>
+    </div>
   )
 
   const LoadingSkeleton = () => (
     <>
       {Array.from({ length: pageSize }).map((_, index) => (
-        <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="h-48 bg-gray-200 animate-pulse"></div>
+        <div key={index} className="bg-dark-bg-quaternary rounded-lg border border-dark-border overflow-hidden">
+          <div className="h-48 bg-dark-bg-tertiary animate-pulse"></div>
           <div className="p-4">
-            <div className="h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
-            <div className="h-6 bg-gray-200 rounded animate-pulse mb-2"></div>
-            <div className="h-4 bg-gray-200 rounded animate-pulse mb-1"></div>
-            <div className="h-4 bg-gray-200 rounded animate-pulse mb-4"></div>
-            <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
-                                </div>
-                              </div>
+            <div className="h-4 bg-dark-bg-tertiary rounded animate-pulse mb-2"></div>
+            <div className="h-6 bg-dark-bg-tertiary rounded animate-pulse mb-2"></div>
+            <div className="h-4 bg-dark-bg-tertiary rounded animate-pulse mb-1"></div>
+            <div className="h-4 bg-dark-bg-tertiary rounded animate-pulse mb-4"></div>
+            <div className="h-10 bg-dark-bg-tertiary rounded animate-pulse"></div>
+          </div>
+        </div>
       ))}
     </>
   )
@@ -590,181 +459,157 @@ export function InventoryPage() {
       {Array.from({ length: pageSize }).map((_, index) => (
         <tr key={index}>
           <td className="px-6 py-4">
-            <div className="w-16 h-12 bg-gray-200 rounded-md animate-pulse"></div>
-                        </td>
-          <td className="px-6 py-4">
-            <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                        </td>
-          <td className="px-6 py-4">
-            <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                        </td>
-          <td className="px-6 py-4">
-            <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                        </td>
-          <td className="px-6 py-4">
-            <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                        </td>
-          <td className="px-6 py-4">
-            <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
+            <div className="w-16 h-12 bg-dark-bg-tertiary rounded-md animate-pulse"></div>
           </td>
           <td className="px-6 py-4">
-            <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-4 bg-dark-bg-tertiary rounded animate-pulse"></div>
           </td>
           <td className="px-6 py-4">
-            <div className="h-6 bg-gray-200 rounded-full animate-pulse"></div>
+            <div className="h-4 bg-dark-bg-tertiary rounded animate-pulse"></div>
           </td>
           <td className="px-6 py-4">
-            <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                        </td>
-                      </tr>
-                    ))}
+            <div className="h-4 bg-dark-bg-tertiary rounded animate-pulse"></div>
+          </td>
+          <td className="px-6 py-4">
+            <div className="h-4 bg-dark-bg-tertiary rounded animate-pulse"></div>
+          </td>
+          <td className="px-6 py-4">
+            <div className="h-4 bg-dark-bg-tertiary rounded animate-pulse"></div>
+          </td>
+          <td className="px-6 py-4">
+            <div className="h-4 bg-dark-bg-tertiary rounded animate-pulse"></div>
+          </td>
+          <td className="px-6 py-4">
+            <div className="h-6 bg-dark-bg-tertiary rounded-full animate-pulse"></div>
+          </td>
+          <td className="px-6 py-4">
+            <div className="h-4 bg-dark-bg-tertiary rounded animate-pulse"></div>
+          </td>
+        </tr>
+      ))}
     </>
   )
 
   const EmptyState = () => (
     <div className="text-center py-12">
-      <div className="text-gray-400 mb-4">
+      <div className="text-dark-text-muted mb-4">
         <Car className="w-16 h-16 mx-auto" />
-              </div>
-      <h3 className="text-lg font-medium text-gray-900 mb-2">No vehicles found</h3>
-      <p className="text-gray-500 mb-6">Try adjusting your filters or add a new vehicle to get started.</p>
-      <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 mx-auto">
-        <Plus className="w-4 h-4" />
+      </div>
+      <h3 className="text-h3 font-heading text-dark-text-primary mb-2">No vehicles found</h3>
+      <p className="text-body-md text-dark-text-secondary mb-6">Try adjusting your filters or add a new vehicle to get started.</p>
+      <Button icon={Plus}>
         Add Vehicle
-      </button>
-            </div>
+      </Button>
+    </div>
   )
 
-
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-full flex flex-col bg-dark-bg-primary">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
+      <div className="bg-dark-bg-secondary border-b border-dark-border px-6 py-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Inventory</h1>
-            <p className="text-gray-600 mt-1 text-sm sm:text-base">
+          <div>
+            <h1 className="text-h1 font-heading text-dark-text-primary">Inventory Management</h1>
+            <p className="text-body-md text-dark-text-secondary mt-1">
               Manage your vehicle inventory ({totalItems} vehicles)
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button 
-              onClick={async () => {
-                try {
-                  // You can change these credentials to match your admin user
-                  const email = 'admin@example.com' // Change this to your admin email
-                  const password = 'admin123' // Change this to your admin password
-                  
-                  console.log('Attempting login...')
-                  const result = await apiClient.login(email, password)
-                  console.log('Login successful:', result)
-                  
-                  // Reload vehicles after successful login
-                  setTimeout(() => loadVehicles(), 1000)
-                } catch (error) {
-                  console.error('Login failed:', error)
-                  alert('Login failed. Please check your credentials.')
-                }
-              }}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2"
+            <Button 
+              variant="secondary" 
+              icon={Settings} 
+              onClick={handleLogin}
             >
-              <Settings className="w-4 h-4" />
               Login
-            </button>
-            <button 
-              onClick={loadVehicles}
-              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors flex items-center gap-2"
+            </Button>
+            <Button 
+              variant="secondary" 
+              icon={RefreshCw} 
+              onClick={handleRefresh}
             >
-              <RefreshCw className="w-4 h-4" />
               Refresh
-            </button>
-            <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2">
-              <Plus className="w-4 h-4" />
+            </Button>
+            <Button icon={Plus}>
               Add Vehicle
-            </button>
+            </Button>
           </div>
         </div>
       </div>
 
-      <div className="p-4 sm:p-6">
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* Filter Panel - Desktop */}
-          <div className="lg:w-80 flex-shrink-0">
-            <div className="hidden lg:block">
-              <FilterPanel />
+      <div className="flex-1 flex overflow-hidden">
+        {/* Filter Panel - Desktop */}
+        <div className="w-80 flex-shrink-0 border-r border-dark-border bg-dark-bg-secondary">
+          <div className="hidden lg:block h-full overflow-y-auto p-6">
+            <FilterPanel />
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Search and Controls */}
+          <div className="bg-dark-bg-secondary border-b border-dark-border p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-4">
+                {/* Mobile Filter Button */}
+                <Button
+                  variant="secondary"
+                  icon={Filter}
+                  onClick={() => setShowMobileFilters(true)}
+                  className="lg:hidden"
+                >
+                  Filters
+                </Button>
+
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-dark-text-muted" />
+                  <input
+                    type="text"
+                    placeholder="Search vehicles..."
+                    value={searchTerm}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="pl-10 pr-4 py-2 bg-dark-bg-tertiary border border-dark-border rounded-lg text-dark-text-primary placeholder-dark-text-muted focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary w-64"
+                  />
+                </div>
+              </div>
+
+              {/* View Toggle */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={viewMode === 'grid' ? 'primary' : 'secondary'}
+                  icon={Grid3X3}
+                  onClick={() => setViewMode('grid')}
+                />
+                <Button
+                  variant={viewMode === 'table' ? 'primary' : 'secondary'}
+                  icon={List}
+                  onClick={() => setViewMode('table')}
+                />
+              </div>
             </div>
           </div>
 
-          {/* Main Content */}
-          <div className="flex-1">
-            {/* Search and Controls */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  {/* Mobile Filter Button */}
-                  <button
-                    onClick={() => setShowMobileFilters(true)}
-                    className="lg:hidden px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
-                  >
-                    <Filter className="w-4 h-4" />
-                    Filters
-                  </button>
-
-                  {/* Search */}
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search vehicles..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
-                    />
-                  </div>
-                </div>
-
-                {/* View Toggle */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={`p-2 rounded-lg transition-colors ${
-                      viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'
-                    }`}
-                  >
-                    <Grid3X3 className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('table')}
-                    className={`p-2 rounded-lg transition-colors ${
-                      viewMode === 'table' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'
-                    }`}
-                  >
-                    <List className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Content */}
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6">
             {loading ? (
               <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6' : ''}>
                 {viewMode === 'grid' ? <LoadingSkeleton /> : (
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                  <div className="bg-dark-bg-quaternary rounded-lg border border-dark-border overflow-hidden">
+                    <table className="min-w-full divide-y divide-dark-border">
+                      <thead className="bg-dark-bg-tertiary">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sale Time</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sale Name</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Highlights</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Sale</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Next Sale</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Image</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Sale Time</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Sale Name</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Region</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Highlights</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Current Sale</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Next Sale</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Action</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-dark-bg-quaternary divide-y divide-dark-border">
                         <TableLoadingSkeleton />
                       </tbody>
                     </table>
@@ -773,16 +618,12 @@ export function InventoryPage() {
               </div>
             ) : error ? (
               <div className="text-center py-12">
-                <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Error loading vehicles</h3>
-                <p className="text-gray-500 mb-4">{error}</p>
-                <button
-                  onClick={loadVehicles}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 mx-auto"
-                >
-                  <RefreshCw className="w-4 h-4" />
+                <AlertCircle className="w-12 h-12 text-accent-error mx-auto mb-4" />
+                <h3 className="text-h3 font-heading text-dark-text-primary mb-2">Error loading vehicles</h3>
+                <p className="text-body-md text-dark-text-secondary mb-4">{error}</p>
+                <Button onClick={handleRefresh} icon={RefreshCw}>
                   Try Again
-                </button>
+                </Button>
               </div>
             ) : vehicles.length === 0 ? (
               <EmptyState />
@@ -791,28 +632,36 @@ export function InventoryPage() {
                 {viewMode === 'grid' ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {vehicles.map((vehicle) => (
-                      <VehicleCard key={vehicle.id} vehicle={vehicle} />
+                      <VehicleCard 
+                        key={vehicle.id} 
+                        vehicle={vehicle} 
+                        onViewDetails={handleViewDetails}
+                      />
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                  <div className="bg-dark-bg-quaternary rounded-lg border border-dark-border overflow-hidden">
+                    <table className="min-w-full divide-y divide-dark-border">
+                      <thead className="bg-dark-bg-tertiary">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sale Time</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sale Name</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Highlights</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Sale</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Next Sale</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Image</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Sale Time</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Sale Name</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Region</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Highlights</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Current Sale</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Next Sale</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-dark-text-muted uppercase tracking-wider">Action</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-dark-bg-quaternary divide-y divide-dark-border">
                         {vehicles.map((vehicle) => (
-                          <VehicleTableRow key={vehicle.id} vehicle={vehicle} />
+                          <VehicleTableRow 
+                            key={vehicle.id} 
+                            vehicle={vehicle} 
+                            onViewDetails={handleViewDetails}
+                          />
                         ))}
                       </tbody>
                     </table>
@@ -821,29 +670,13 @@ export function InventoryPage() {
 
                 {/* Pagination */}
                 {totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-6">
-                    <div className="text-sm text-gray-700">
-                      Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalItems)} of {totalItems} results
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                        className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Previous
-                </button>
-                      <span className="px-3 py-2 text-sm text-gray-700">
-                        Page {currentPage} of {totalPages}
-                      </span>
-                      <button
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages}
-                        className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Next
-                </button>
-              </div>
+                  <div className="mt-6">
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={handlePageChange}
+                      isLoading={loading}
+                    />
                   </div>
                 )}
               </>
@@ -856,21 +689,31 @@ export function InventoryPage() {
       {showMobileFilters && (
         <div className="fixed inset-0 z-50 overflow-hidden lg:hidden">
           <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setShowMobileFilters(false)}></div>
-          <div className="absolute left-0 top-0 h-full w-full max-w-sm bg-white shadow-xl flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
-              <button 
+          <div className="absolute left-0 top-0 h-full w-full max-w-sm bg-dark-bg-secondary shadow-xl flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-dark-border">
+              <h3 className="text-h3 font-heading text-dark-text-primary">Filters</h3>
+              <Button 
+                variant="ghost" 
+                icon={Filter}
                 onClick={() => setShowMobileFilters(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              />
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               <FilterPanel />
             </div>
           </div>
         </div>
+      )}
+
+      {/* Vehicle Detail Modal */}
+      {showDetailModal && selectedVehicleId && (
+        <VehicleDetailModal
+          vehicleId={selectedVehicleId}
+          onClose={() => {
+            setShowDetailModal(false)
+            setSelectedVehicleId(null)
+          }}
+        />
       )}
     </div>
   )

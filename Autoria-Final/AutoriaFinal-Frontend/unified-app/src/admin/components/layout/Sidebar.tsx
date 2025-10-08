@@ -34,19 +34,19 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
-    <aside className={`bg-white border-r border-gray-200 transition-all duration-300 ${
+    <aside className={`bg-dark-bg-secondary border-r border-dark-border transition-all duration-300 ${
       collapsed ? 'w-16' : 'w-64'
     }`}>
       {/* Collapse Toggle */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-4 border-b border-dark-border">
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-dark-bg-tertiary transition-colors"
         >
           {collapsed ? (
-            <ChevronRight className="w-5 h-5 text-gray-600" />
+            <ChevronRight className="w-5 h-5 text-dark-text-secondary" />
           ) : (
-            <ChevronLeft className="w-5 h-5 text-gray-600" />
+            <ChevronLeft className="w-5 h-5 text-dark-text-secondary" />
           )}
         </button>
       </div>
@@ -58,10 +58,10 @@ export function Sidebar() {
             key={item.name}
             to={item.href}
             className={({ isActive }) =>
-              `flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+              `flex items-center px-3 py-2 rounded-lg text-body-sm font-body font-medium transition-all duration-200 ${
                 isActive
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  ? 'bg-accent-primary text-white shadow-dark'
+                  : 'text-dark-text-secondary hover:bg-dark-bg-tertiary hover:text-dark-text-primary'
               } ${collapsed ? 'justify-center' : ''}`
             }
             title={collapsed ? item.name : undefined}

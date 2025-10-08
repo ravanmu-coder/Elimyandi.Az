@@ -6,6 +6,7 @@ using AutoriaFinal.Contract.Dtos.Auctions.Car;
 using AutoriaFinal.Contract.Dtos.Auctions.Location;
 using AutoriaFinal.Contract.Dtos.Identity;
 using AutoriaFinal.Contract.Dtos.Identity.Token;
+using AutoriaFinal.Contract.Services.Auctions;
 using AutoriaFinal.Domain.Entities.Auctions;
 using AutoriaFinal.Domain.Entities.Identity;
 using System;
@@ -21,43 +22,64 @@ namespace AutoriaFinal.Application.Profiles
         public CustomProfile()
         {
             #region Auctions
-            #region Auction
+            #region Auction Mappings - CLEAN VERSION
+
+            // ========== AuctionGetDto ==========
             CreateMap<Auction, AuctionGetDto>()
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status.ToString()))
                 .ForMember(dest => dest.TotalCarsCount, opt => opt.MapFrom(src => src.AuctionCars.Count))
-                .ForMember(dest => dest.CarsWithPreBidsCount, opt => opt.MapFrom(src => src.AuctionCars.Count(ac => ac.Bids.Any(b => b.IsPreBid))))
-                .ForMember(dest => dest.LocationName, opt => opt.MapFrom(src => src.Location != null ? src.Location.Name : null))
+                .ForMember(dest => dest.CarsWithPreBidsCount, opt => opt.MapFrom(src =>
+                    src.AuctionCars.Count(ac => ac.Bids.Any(b => b.IsPreBid))))
+                .ForMember(dest => dest.LocationName, opt => opt.MapFrom(src =>
+                    src.Location != null ? src.Location.Name : null))
                 .ReverseMap();
 
+            // ========== AuctionDetailDto ==========
             CreateMap<Auction, AuctionDetailDto>()
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status.ToString()))
-                .ForMember(dest => dest.TotalCarsCount, opt => opt.Ignore()) // Service-də hesablanır
-                .ForMember(dest => dest.CarsWithPreBidsCount, opt => opt.Ignore()) // Service-də hesablanır
-                .ForMember(dest => dest.SoldCarsCount, opt => opt.Ignore()) // Service-də hesablanır
-                .ForMember(dest => dest.UnsoldCarsCount, opt => opt.Ignore()) // Service-də hesablanır
-                .ForMember(dest => dest.TotalSalesAmount, opt => opt.Ignore()) // Service-də hesablanır
+                .ForMember(dest => dest.IsReadyToStart, opt => opt.MapFrom(src => src.IsReadyToStart()))
+                .ForMember(dest => dest.IsReadyToMakeReady, opt => opt.MapFrom(src => src.IsReadyToMakeReady()))
+                .ForMember(dest => dest.TimeUntilStart, opt => opt.MapFrom(src =>
+                    src.StartTimeUtc > DateTime.UtcNow ? src.StartTimeUtc - DateTime.UtcNow : (TimeSpan?)null))
+                .ForMember(dest => dest.TimeUntilEnd, opt => opt.MapFrom(src =>
+                    src.EndTimeUtc > DateTime.UtcNow ? src.EndTimeUtc - DateTime.UtcNow : (TimeSpan?)null))
+                .ForMember(dest => dest.TotalCarsCount, opt => opt.Ignore())
+                .ForMember(dest => dest.CarsWithPreBidsCount, opt => opt.Ignore())
+                .ForMember(dest => dest.SoldCarsCount, opt => opt.Ignore())
+                .ForMember(dest => dest.UnsoldCarsCount, opt => opt.Ignore())
+                .ForMember(dest => dest.TotalSalesAmount, opt => opt.Ignore())
                 .ReverseMap();
 
+            // ========== AuctionCreateDto ==========
             CreateMap<AuctionCreateDto, Auction>()
-                .ForMember(dest => dest.Id, opt => opt.Ignore()) // Entity-də yaradılır
-                .ForMember(dest => dest.Status, opt => opt.Ignore()) // Domain method-da təyin edilir
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.Status, opt => opt.Ignore())
                 .ForMember(dest => dest.IsLive, opt => opt.Ignore())
                 .ForMember(dest => dest.CurrentCarLotNumber, opt => opt.Ignore())
                 .ForMember(dest => dest.CurrentCarStartTime, opt => opt.Ignore())
                 .ForMember(dest => dest.ExtendedCount, opt => opt.Ignore())
-                .ForMember(dest => dest.CreatedAt, opt => opt.Ignore()) // BaseEntity-də təyin edilir
+                .ForMember(dest => dest.PreBidStartTimeUtc, opt => opt.Ignore())
+                .ForMember(dest => dest.PreBidEndTimeUtc, opt => opt.Ignore())
+                .ForMember(dest => dest.TotalCarsCount, opt => opt.Ignore())
+                .ForMember(dest => dest.CarsWithPreBidsCount, opt => opt.Ignore())
+                .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
                 .ForMember(dest => dest.UpdatedAtUtc, opt => opt.Ignore())
+                .ForMember(dest => dest.Location, opt => opt.Ignore())
+                .ForMember(dest => dest.AuctionCars, opt => opt.Ignore())
                 .ReverseMap();
 
+            // ========== AuctionUpdateDto ==========
             CreateMap<AuctionUpdateDto, Auction>()
                 .ReverseMap();
 
+            // ========== AuctionStatisticsDto ==========
             CreateMap<Auction, AuctionStatisticsDto>()
                 .ForMember(dest => dest.AuctionId, opt => opt.MapFrom(src => src.Id))
                 .ForMember(dest => dest.AuctionName, opt => opt.MapFrom(src => src.Name))
                 .ForMember(dest => dest.AuctionStartTime, opt => opt.MapFrom(src => src.StartTimeUtc))
-                .ForMember(dest => dest.AuctionEndTime, opt => opt.MapFrom(src => src.EndTimeUtc))
-                .ForMember(dest => dest.TotalCars, opt => opt.Ignore()) 
+                .ForMember(dest => dest.AuctionEndTime, opt => opt.MapFrom(src =>
+                    src.Status == Domain.Enums.AuctionEnums.AuctionStatus.Ended ? src.EndTimeUtc : (DateTime?)null))
+                .ForMember(dest => dest.TotalCars, opt => opt.Ignore())
                 .ForMember(dest => dest.SoldCars, opt => opt.Ignore())
                 .ForMember(dest => dest.UnsoldCars, opt => opt.Ignore())
                 .ForMember(dest => dest.TotalSalesAmount, opt => opt.Ignore())
@@ -66,6 +88,18 @@ namespace AutoriaFinal.Application.Profiles
                 .ForMember(dest => dest.UniqueBidders, opt => opt.Ignore())
                 .ForMember(dest => dest.AuctionDuration, opt => opt.Ignore())
                 .ReverseMap();
+
+            // ========== AuctionTimerInfo ==========
+            CreateMap<Auction, AuctionTimerInfo>()
+                .ForMember(dest => dest.AuctionId, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.CurrentCarLotNumber, opt => opt.MapFrom(src => src.CurrentCarLotNumber))
+                .ForMember(dest => dest.TimerSeconds, opt => opt.MapFrom(src => src.TimerSeconds))
+                .ForMember(dest => dest.CarStartTime, opt => opt.MapFrom(src => src.CurrentCarStartTime))
+                .ForMember(dest => dest.LastBidTime, opt => opt.Ignore())
+                .ForMember(dest => dest.RemainingSeconds, opt => opt.Ignore())
+                .ForMember(dest => dest.IsExpired, opt => opt.Ignore())
+                .ReverseMap();
+
             #endregion
             #region AuctionCar
             CreateMap<AuctionCarCreateDto, AuctionCar>()

@@ -11,7 +11,6 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace AutoriaFinal.Application.Services.Auctions
@@ -26,243 +25,380 @@ namespace AutoriaFinal.Application.Services.Auctions
         private readonly IAuctionCarRepository _auctionCarRepository;
         private readonly IBidRepository _bidRepository;
         private readonly IAuctionRepository _auctionRepository;
+        private readonly ICarRepository _carRepository;
+        private readonly IAuctionWinnerRepository _auctionWinnerRepository;
 
         public AuctionCarService(
             IAuctionCarRepository auctionCarRepository,
             IBidRepository bidRepository,
             IAuctionRepository auctionRepository,
+            ICarRepository carRepository,
+            IAuctionWinnerRepository auctionWinnerRepository,
             IUnitOfWork unitOfWork,
             IMapper mapper,
-            ILogger<GenericService<AuctionCar, AuctionCarGetDto, AuctionCarDetailDto, AuctionCarCreateDto, AuctionCarUpdateDto>> logger)
+            ILogger<AuctionCarService> logger)
             : base(auctionCarRepository, mapper, unitOfWork, logger)
         {
             _auctionCarRepository = auctionCarRepository;
             _bidRepository = bidRepository;
             _auctionRepository = auctionRepository;
+            _carRepository = carRepository;
+            _auctionWinnerRepository = auctionWinnerRepository;
         }
 
-        #region Override Generic Methods    
+        #region Override Generic Methods
+
         public override async Task<AuctionCarDetailDto> AddAsync(AuctionCarCreateDto dto)
         {
-            _logger.LogInformation("➕ Creating new auction car - Auction: {AuctionId}, Car: {CarId}, Lot: {LotNumber}",
-                dto.AuctionId, dto.CarId, dto.LotNumber);
+            _logger.LogInformation("🚗➕ Creating new auction car - , Auction: {AuctionId}, Car: {CarId}, Lot: {LotNumber}, ERV: ${ERV} - Time: 2025-10-05 19:39:02",
+                dto.AuctionId, dto.CarId, dto.LotNumber, dto.EstimatedRetailValue);
 
             if (dto == null)
-            {
                 throw new BadRequestException("AuctionCar create data cannot be null");
+
+            var auction = await _auctionRepository.GetByIdAsync(dto.AuctionId);
+            if (auction == null)
+            {
+                _logger.LogError("❌ Auction not found: {AuctionId} - User: .mu-coder", dto.AuctionId);
+                throw new NotFoundException("Auction", dto.AuctionId);
+            }
+
+            var car = await _carRepository.GetByIdAsync(dto.CarId);
+            if (car == null)
+            {
+                _logger.LogError("❌ Car not found: {CarId} - User: .mu-coder", dto.CarId);
+                throw new NotFoundException("Car", dto.CarId);
             }
 
             var existingLot = await _auctionCarRepository.GetByLotNumberAsync(dto.LotNumber);
             if (existingLot != null)
             {
-                throw new ConflictException($"Lot number {dto.LotNumber} already exists");
+                _logger.LogError("❌ Lot number already exists: {LotNumber} -.", dto.LotNumber);
+                throw new ConflictException($"Lot nömrəsi {dto.LotNumber} artıq mövcuddur");
             }
-            
+
             var auctionCar = AuctionCar.Create(
                 dto.AuctionId,
                 dto.CarId,
                 dto.LotNumber,
-                dto.MinPreBid,
-                dto.ReservePrice,
-                dto.ItemNumber
+                dto.EstimatedRetailValue,
+                dto.ItemNumber,
+                dto.LaneNumber,
+                dto.RequiresSellerApproval
             );
+
+            if (dto.RunOrder.HasValue)
+                auctionCar.RunOrder = dto.RunOrder;
+
+            if (dto.ScheduledTime.HasValue)
+                auctionCar.ScheduledTime = dto.ScheduledTime;
+
+            if (!string.IsNullOrEmpty(dto.SellerNotes))
+                auctionCar.SellerNotes = dto.SellerNotes;
 
             var createdAuctionCar = await _auctionCarRepository.AddAsync(auctionCar);
             await _unitOfWork.SaveChangesAsync();
 
-            _logger.LogInformation("✅ Auction car created successfully: {LotNumber} with MinPreBid: ${MinPreBid}",
-               dto.LotNumber, dto.MinPreBid);
+            _logger.LogInformation("✅ Auction car created successfully , Lot: {LotNumber}, StartPrice: ${StartPrice}, Reserve: ${Reserve}",
+                dto.LotNumber, createdAuctionCar.StartPrice, createdAuctionCar.ReservePrice);
 
-            return _mapper.Map<AuctionCarDetailDto>(createdAuctionCar);
+            return await GetCarWithFullDetailsAsync(createdAuctionCar.Id);
         }
 
         public override async Task<AuctionCarDetailDto> UpdateAsync(Guid id, AuctionCarUpdateDto dto)
         {
-            _logger.LogInformation("✏️ Updating auction car: {AuctionCarId}", id);
+            _logger.LogInformation("✏️ Updating auction car -., AuctionCarId: {AuctionCarId}", id);
 
             if (dto == null)
-            {
                 throw new BadRequestException("Update data cannot be null");
-            }
 
-            var auctionCar = await _auctionCarRepository.GetByIdAsync(id);
+            var auctionCar = await _auctionCarRepository.GetAuctionCarWithBidsAsync(id);
             if (auctionCar == null)
             {
+                _logger.LogError("❌ AuctionCar not found: {AuctionCarId}", id);
                 throw new NotFoundException("AuctionCar", id);
             }
 
             if (auctionCar.IsActive)
             {
+                _logger.LogError("❌ Cannot update active auction car: {LotNumber} ", auctionCar.LotNumber);
                 throw new AuctionBusinessException(auctionCar.LotNumber, "Cannot update active auction car");
             }
 
-            if (dto.ReservePrice.HasValue)
+            if (dto.EstimatedRetailValue.HasValue)
             {
-                auctionCar.SetReserve(dto.ReservePrice.Value);
-                _logger.LogInformation("Updated reserve price to ${ReservePrice} for {LotNumber}",
-                    dto.ReservePrice.Value, auctionCar.LotNumber);
-            }
-
-            if (dto.MinPreBid.HasValue)
-            {
-                var hasBids = await _bidRepository.GetTotalBidCountAsync(id) > 0;
-                if (hasBids)
+                var hasBids = auctionCar.Bids.Any(b => b.Status == BidStatus.Placed);
+                if (hasBids && !dto.StartPriceOverride.HasValue)
                 {
-                    _logger.LogWarning("⚠️ Cannot update MinPreBid - bids already placed for {LotNumber}",
-                        auctionCar.LotNumber);
-                    throw new AuctionBusinessException(auctionCar.LotNumber, "Cannot update MinPreBid after bids are placed");
+                    _logger.LogWarning("⚠️ Cannot auto-recalculate pricing - bids exist for {LotNumber} -.", auctionCar.LotNumber);
+                    throw new AuctionBusinessException(auctionCar.LotNumber, "Cannot change ERV after bids are placed without manual price override");
                 }
 
+                auctionCar.SetPricing(dto.EstimatedRetailValue.Value);
             }
+
+            if (dto.StartPriceOverride.HasValue)
+            {
+                auctionCar.StartPrice = dto.StartPriceOverride.Value;
+                auctionCar.CurrentPrice = dto.StartPriceOverride.Value;
+            }
+
+            if (dto.ReservePriceOverride.HasValue)
+                auctionCar.ReservePrice = dto.ReservePriceOverride.Value;
+
+            if (dto.LaneNumber.HasValue)
+                auctionCar.LaneNumber = dto.LaneNumber;
+
+            if (dto.RunOrder.HasValue)
+                auctionCar.RunOrder = dto.RunOrder;
+
+            if (dto.ScheduledTime.HasValue)
+                auctionCar.ScheduledTime = dto.ScheduledTime;
+
+            if (dto.RequiresSellerApproval.HasValue)
+                auctionCar.RequiresSellerApproval = dto.RequiresSellerApproval.Value;
+
+            if (!string.IsNullOrEmpty(dto.SellerNotes))
+                auctionCar.SellerNotes = dto.SellerNotes;
 
             var updatedAuctionCar = await _auctionCarRepository.UpdateAsync(auctionCar);
             await _unitOfWork.SaveChangesAsync();
 
-            return _mapper.Map<AuctionCarDetailDto>(updatedAuctionCar);
+            _logger.LogInformation("✅ Auction car updated successfully -., Lot: {LotNumber}", auctionCar.LotNumber);
+
+            return await GetCarWithFullDetailsAsync(updatedAuctionCar.Id);
         }
 
-        //  Bu metodu override edək DeleteAuctionCarAsync yerinə
         public new async Task<bool> DeleteAsync(Guid id)
         {
-            _logger.LogInformation("🗑️ Deleting auction car: {AuctionCarId}", id);
+            _logger.LogInformation("🗑️ Deleting auction car -., AuctionCarId: {AuctionCarId}", id);
 
-            var auctionCar = await _auctionCarRepository.GetByIdAsync(id);
+            var auctionCar = await _auctionCarRepository.GetAuctionCarWithBidsAsync(id);
             if (auctionCar == null)
             {
+                _logger.LogError("❌ AuctionCar not found for deletion: {AuctionCarId} -.", id);
                 throw new NotFoundException("AuctionCar", id);
             }
 
-            var bidCount = await _bidRepository.GetTotalBidCountAsync(id);
+            var bidCount = auctionCar.Bids.Count(b => b.Status == BidStatus.Placed);
             if (bidCount > 0)
             {
+                _logger.LogError("❌ Cannot delete auction car with bids: {LotNumber}, BidCount: {BidCount} -.",
+                    auctionCar.LotNumber, bidCount);
                 throw new AuctionBusinessException(auctionCar.LotNumber, $"Cannot delete car that has {bidCount} bids");
             }
 
             var auction = await _auctionRepository.GetByIdAsync(auctionCar.AuctionId);
             if (auction?.Status == AuctionStatus.Running)
             {
+                _logger.LogError("❌ Cannot delete car from running auction: {LotNumber} -.", auctionCar.LotNumber);
                 throw new AuctionBusinessException(auctionCar.LotNumber, "Cannot delete car from running auction");
             }
 
-            return await base.DeleteAsync(id);
-        }
-        public new async Task<AuctionCarDetailDto> GetByIdAsync(Guid id)
-        {
-            _logger.LogInformation("🔍 Getting auction car by ID: {AuctionCarId}", id);
+            var result = await base.DeleteAsync(id);
 
-            var auctionCar = await _auctionCarRepository.GetAuctionCarWithFullDetailsAsync(id);
-            if (auctionCar == null)
-            {
-                throw new NotFoundException("AuctionCar", id);
-            }
+            _logger.LogInformation("✅ Auction car deleted successfully -., Lot: {LotNumber}", auctionCar.LotNumber);
 
-            var dto = _mapper.Map<AuctionCarDetailDto>(auctionCar);
-
-            if (auctionCar.IsActive)
-            {
-                var timerInfo = await GetCarTimerInfoAsync(id);
-                dto.RemainingTimeSeconds = timerInfo.RemainingTimeSeconds;
-                dto.IsTimeExpired = timerInfo.IsExpired;
-            }
-
-            return dto;
+            return result;
         }
 
         #endregion
 
-        #region AuctionCar LifeCycle
-        public async Task<AuctionCarDetailDto> PrepareCarForAuctionAsync(Guid auctionCarId)
+        #region Lifecycle Management
+
+        // ✅ DÜZƏLDILMIŞ PrepareCarForAuctionAsync()
+        public async Task<AuctionCarDetailDto> PrepareCarForAuctionAsync(Guid auctionCarId, Guid currentUserId)
         {
-            _logger.LogInformation("🏁 Preparing car for auction: {AuctionCarId}", auctionCarId);
+            _logger.LogInformation("🏁 Preparing car for auction - User: ravanmu-coder, AuctionCarId: {AuctionCarId}", auctionCarId);
+
             var auctionCar = await _auctionCarRepository.GetAuctionCarWithBidsAsync(auctionCarId);
             if (auctionCar == null)
             {
+                _logger.LogError("❌ AuctionCar not found for preparation: {AuctionCarId} - User: ravanmu-coder", auctionCarId);
                 throw new NotFoundException("AuctionCar", auctionCarId);
+            }
+
+            // ✅ FİX: PreAuction və ya ReadyForAuction olmağına icazə ver
+            if (auctionCar.AuctionCondition != AuctionCarCondition.PreAuction &&
+                auctionCar.AuctionCondition != AuctionCarCondition.ReadyForAuction)
+            {
+                _logger.LogError("❌ Car not in PreAuction/ReadyForAuction condition: {LotNumber}, Current: {Condition} - User: ravanmu-coder",
+                    auctionCar.LotNumber, auctionCar.AuctionCondition);
+                throw new AuctionBusinessException(auctionCar.LotNumber, $"Car is not in PreAuction/ReadyForAuction condition");
             }
 
             var preBidCount = await _auctionCarRepository.GetTotalPreBidCountAsync(auctionCarId);
 
+            // ✅ FİX: StartPrice və ya pre-bid olması kifayətdir
+            if (preBidCount == 0 && auctionCar.StartPrice <= 0)
+            {
+                _logger.LogError("❌ Cannot prepare car without StartPrice or pre-bids: {LotNumber} ", auctionCar.LotNumber);
+                throw new AuctionBusinessException(auctionCar.LotNumber, "Car must have StartPrice or pre-bids to be prepared");
+            }
+
             if (preBidCount == 0)
             {
-                _logger.LogInformation("⚠️ Car has no pre-bids, using MinPreBid: ${MinPreBid} for {LotNumber}",
-                    auctionCar.MinPreBid, auctionCar.LotNumber);
-
-                auctionCar.UpdateCurrentPrice(auctionCar.MinPreBid);
-
-                await _auctionCarRepository.UpdateAsync(auctionCar);
-                await _unitOfWork.SaveChangesAsync();
-
-                _logger.LogInformation("✅ Car prepared for auction: {LotNumber} with NO pre-bids, starting at ${StartPrice}",
-                    auctionCar.LotNumber, auctionCar.MinPreBid);
+                auctionCar.CurrentPrice = auctionCar.StartPrice;
+                _logger.LogInformation("💰 Using StartPrice: ${StartPrice} for {LotNumber} ",
+                    auctionCar.StartPrice, auctionCar.LotNumber);
             }
             else
             {
                 var highestPreBid = await _auctionCarRepository.GetHighestPreBidAmountAsync(auctionCarId);
-                if (highestPreBid > 0)
-                {
-                    auctionCar.UpdateCurrentPrice(highestPreBid);
-                    _logger.LogInformation("💰 Starting price set to highest pre-bid: ${Amount} for {LotNumber}",
-                        highestPreBid, auctionCar.LotNumber);
-                }
-
-                await _auctionCarRepository.UpdateAsync(auctionCar);
-                await _unitOfWork.SaveChangesAsync();
-
-                _logger.LogInformation("✅ Car prepared for auction: {LotNumber} with {PreBidCount} pre-bids, starting at ${StartPrice}",
-                    auctionCar.LotNumber, preBidCount, highestPreBid);
+                auctionCar.CurrentPrice = Math.Max(highestPreBid, auctionCar.StartPrice);
+                _logger.LogInformation("💰 Using highest pre-bid: ${PreBid} for {LotNumber} ",
+                    auctionCar.CurrentPrice, auctionCar.LotNumber);
             }
 
-            return _mapper.Map<AuctionCarDetailDto>(auctionCar);
+            auctionCar.AuctionCondition = AuctionCarCondition.ReadyForAuction;
+            auctionCar.PreBidCount = preBidCount;
+
+            await _auctionCarRepository.UpdateAsync(auctionCar);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("✅ Car prepared for auction  Lot: {LotNumber}, PreBids: {PreBids}, StartPrice: ${StartPrice}",
+                auctionCar.LotNumber, preBidCount, auctionCar.CurrentPrice);
+
+            return await GetCarWithFullDetailsAsync(auctionCarId, currentUserId);
         }
-        public async Task<AuctionCarDetailDto> ActivateCarAsync(Guid auctionCarId)
+
+        // ✅ DÜZƏLDILMIŞ ActivateCarAsync()
+        public async Task<AuctionCarDetailDto> ActivateCarAsync(Guid auctionCarId, Guid currentUserId)
         {
-            _logger.LogInformation("🎯 Activating car for live auction: {AuctionCarId}", auctionCarId);
+            _logger.LogInformation("🎯 Activating car for live auction - User: ravanmu-coder, AuctionCarId: {AuctionCarId}", auctionCarId);
 
             var auctionCar = await _auctionCarRepository.GetAuctionCarWithBidsAsync(auctionCarId);
             if (auctionCar == null)
             {
+                _logger.LogError("❌ AuctionCar not found for activation: {AuctionCarId} - User: ravanmu-coder", auctionCarId);
                 throw new NotFoundException("AuctionCar", auctionCarId);
             }
 
-            var hasPreBids = await HasRequiredPreBidsAsync(auctionCarId);
-            if (!hasPreBids)
+            // ✅ FİX: ReadyForAuction və ya PreAuction-dan aktiv etməyə icazə ver
+            if (auctionCar.AuctionCondition != AuctionCarCondition.ReadyForAuction &&
+                auctionCar.AuctionCondition != AuctionCarCondition.PreAuction)
             {
-                _logger.LogInformation("⚠️ Car activating without pre-bids, using MinPreBid: ${MinPreBid} for {LotNumber}",
-                    auctionCar.MinPreBid, auctionCar.LotNumber);
+                _logger.LogInformation("⚠️ Auto-preparing car from {CurrentCondition} to ReadyForAuction: {LotNumber} - User: ravanmu-coder",
+                    auctionCar.AuctionCondition, auctionCar.LotNumber);
 
-                if (auctionCar.CurrentPrice <= 0)
-                {
-                    auctionCar.UpdateCurrentPrice(auctionCar.MinPreBid);
-                }
+                // Auto-prepare car
+                auctionCar.AuctionCondition = AuctionCarCondition.ReadyForAuction;
             }
 
+            var auction = await _auctionRepository.GetByIdAsync(auctionCar.AuctionId);
+            if (auction?.Status != AuctionStatus.Running)
+            {
+                _logger.LogError("❌ Cannot activate car - auction not running: {AuctionId} - User: ravanmu-coder", auctionCar.AuctionId);
+                throw new AuctionBusinessException(auctionCar.LotNumber, "Cannot activate car when auction is not running");
+            }
+
+            // ✅ Əvvəlki aktiv car-ı deaktiv et
             var currentActiveCar = await _auctionCarRepository.GetActiveAuctionCarAsync(auctionCar.AuctionId);
             if (currentActiveCar != null && currentActiveCar.Id != auctionCarId)
             {
                 currentActiveCar.MarkAsInactive();
+                currentActiveCar.AuctionCondition = AuctionCarCondition.ReadyForAuction;
                 await _auctionCarRepository.UpdateAsync(currentActiveCar);
-                _logger.LogInformation("🔄 Deactivated previous active car: {PreviousLotNumber}",
+                _logger.LogInformation("🔄 Deactivated previous active car: {PreviousLotNumber} - User: ravanmu-coder",
                     currentActiveCar.LotNumber);
             }
 
+            // ✅ Yeni car-ı aktiv et
             auctionCar.MarkAsActive();
+            auctionCar.AuctionCondition = AuctionCarCondition.LiveAuction;
+
             await _auctionCarRepository.UpdateAsync(auctionCar);
             await _unitOfWork.SaveChangesAsync();
 
-            _logger.LogInformation("✅ Car activated for live auction: {LotNumber} - Timer started, Price: ${CurrentPrice}",
+            _logger.LogInformation("✅ Car activated for live auction - User: ravanmu-coder, Lot: {LotNumber}, Price: ${CurrentPrice}",
                auctionCar.LotNumber, auctionCar.CurrentPrice);
 
-            return _mapper.Map<AuctionCarDetailDto>(auctionCar);
+            return await GetCarWithFullDetailsAsync(auctionCarId, currentUserId);
         }
+
+        //public async Task<AuctionCarDetailDto> EndCarAuctionAsync(Guid auctionCarId, Guid currentUserId, string? reason = null)
+        //{
+        //    _logger.LogInformation("⏹️ Ending auction for car -., AuctionCarId: {AuctionCarId}, Reason: {Reason}",
+        //        auctionCarId, reason ?? "Timer expired");
+
+        //    var auctionCar = await _auctionCarRepository.GetAuctionCarWithBidsAsync(auctionCarId);
+        //    if (auctionCar == null)
+        //    {
+        //        _logger.LogError("❌ AuctionCar not found for ending: {AuctionCarId} -.", auctionCarId);
+        //        throw new NotFoundException("AuctionCar", auctionCarId);
+        //    }
+
+        //    if (auctionCar.AuctionCondition != AuctionCarCondition.LiveAuction)
+        //    {
+        //        _logger.LogError("❌ Car not in live auction: {LotNumber}, Current: {Condition} -.",
+        //            auctionCar.LotNumber, auctionCar.AuctionCondition);
+        //        throw new AuctionBusinessException(auctionCar.LotNumber, $"Car is not in live auction");
+        //    }
+
+        //    var highestBid = auctionCar.Bids
+        //        .Where(b => !b.IsPreBid && b.Status == BidStatus.Placed)
+        //        .OrderByDescending(b => b.Amount)
+        //        .ThenByDescending(b => b.PlacedAtUtc)
+        //        .FirstOrDefault();
+
+        //    if (highestBid != null && highestBid.Amount > 0)
+        //    {
+        //        var isReserveMet = !auctionCar.ReservePrice.HasValue ||
+        //                          highestBid.Amount >= auctionCar.ReservePrice.Value;
+
+        //        if (isReserveMet)
+        //        {
+        //            auctionCar.MarkWon(highestBid.Amount, 0.10m);
+
+        //            var winner = AuctionWinner.Create(
+        //                auctionCar.Id,
+        //                highestBid.UserId,
+        //                highestBid.Id,
+        //                highestBid.Amount
+        //            );
+
+        //            await _auctionWinnerRepository.AddAsync(winner);
+
+        //            _logger.LogInformation("🏆 Car WON -., Lot: {LotNumber}, Winner: {UserId}, Hammer: ${Amount}, Total: ${Total}",
+        //                auctionCar.LotNumber, highestBid.UserId, auctionCar.HammerPrice, auctionCar.TotalPrice);
+        //        }
+        //        else
+        //        {
+        //            auctionCar.MarkUnsold($"Reserve not met (${auctionCar.ReservePrice} required, ${highestBid.Amount} offered)");
+
+        //            _logger.LogInformation("❌ Car NO SALE -., Lot: {LotNumber}, Reserve: ${Reserve}, HighBid: ${Bid}",
+        //                auctionCar.LotNumber, auctionCar.ReservePrice, highestBid.Amount);
+        //        }
+        //    }
+        //    else
+        //    {
+        //        auctionCar.MarkUnsold("No valid bids received");
+
+        //        _logger.LogInformation("❌ Car NO SALE -., Lot: {LotNumber}, Reason: No bids", auctionCar.LotNumber);
+        //    }
+
+        //    await _auctionCarRepository.UpdateAsync(auctionCar);
+        //    await _unitOfWork.SaveChangesAsync();
+
+        //    return await GetCarWithFullDetailsAsync(auctionCarId, currentUserId);
+        //}
         public async Task<AuctionCarDetailDto> EndCarAuctionAsync(Guid auctionCarId)
         {
-            _logger.LogInformation("⏹️ Ending auction for car: {AuctionCarId}", auctionCarId);
+            _logger.LogInformation("⏹️ Ending auction for car - User: ravanmu-coder, AuctionCarId: {AuctionCarId}", auctionCarId);
+
             var auctionCar = await _auctionCarRepository.GetAuctionCarWithBidsAsync(auctionCarId);
             if (auctionCar == null)
-            {
                 throw new NotFoundException("AuctionCar", auctionCarId);
-            }
-            var highestBid = await _bidRepository.GetHighestBidAsync(auctionCarId);
+
+            if (auctionCar.AuctionCondition != AuctionCarCondition.LiveAuction)
+                throw new AuctionBusinessException(auctionCar.LotNumber, "Car is not in live auction");
+
+            var highestBid = auctionCar.Bids
+                .Where(b => !b.IsPreBid && b.Status == BidStatus.Placed)
+                .OrderByDescending(b => b.Amount)
+                .ThenByDescending(b => b.PlacedAtUtc)
+                .FirstOrDefault();
+
             if (highestBid != null && highestBid.Amount > 0)
             {
                 var isReserveMet = !auctionCar.ReservePrice.HasValue ||
@@ -270,440 +406,517 @@ namespace AutoriaFinal.Application.Services.Auctions
 
                 if (isReserveMet)
                 {
-                    // Car is WON
-                    auctionCar.MarkWon(highestBid.Amount);
-                    _logger.LogInformation("🏆 Car WON by user {UserId} for ${Amount}: {LotNumber}",
-                        highestBid.UserId, highestBid.Amount, auctionCar.LotNumber);
+                    // ✅ CAR WON - Calculate buyer's premium (10%)
+                    auctionCar.MarkWon(highestBid.Amount, 0.10m);
+
+                    // Create auction winner record
+                    var winner = AuctionWinner.Create(
+                        auctionCar.Id,
+                        highestBid.UserId,
+                        highestBid.Id,
+                        highestBid.Amount
+                    );
+
+                    await _auctionWinnerRepository.AddAsync(winner);
+
+                    _logger.LogInformation("🏆 Car WON - User: ravanmu-coder, Lot: {LotNumber}, Winner: {UserId}, Hammer: ${Amount}, Total: ${Total}",
+                        auctionCar.LotNumber, highestBid.UserId, auctionCar.HammerPrice, auctionCar.TotalPrice);
                 }
                 else
                 {
-                    auctionCar.MarkUnsold();
-                    _logger.LogInformation("❌ Car UNSOLD - reserve not met (${Reserve} required, ${Bid} offered): {LotNumber}",
-                        auctionCar.ReservePrice, highestBid.Amount, auctionCar.LotNumber);
+                    // ❌ NO SALE - Reserve not met
+                    auctionCar.MarkUnsold($"Reserve not met (${auctionCar.ReservePrice} required, ${highestBid.Amount} offered)");
+
+                    _logger.LogInformation("❌ Car NO SALE - User: ravanmu-coder, Lot: {LotNumber}, Reserve: ${Reserve}, HighBid: ${Bid}",
+                        auctionCar.LotNumber, auctionCar.ReservePrice, highestBid.Amount);
                 }
             }
             else
             {
-                auctionCar.MarkUnsold();
-                _logger.LogInformation("❌ Car UNSOLD - no bids received: {LotNumber}", auctionCar.LotNumber);
+                // ❌ NO SALE - No valid bids
+                auctionCar.MarkUnsold("No valid bids received");
+
+                _logger.LogInformation("❌ Car NO SALE - User: ravanmu-coder, Lot: {LotNumber}, Reason: No bids", auctionCar.LotNumber);
             }
+
             await _auctionCarRepository.UpdateAsync(auctionCar);
             await _unitOfWork.SaveChangesAsync();
+
             return _mapper.Map<AuctionCarDetailDto>(auctionCar);
         }
-        public async Task<AuctionCarDetailDto> MarkCarUnsoldAsync(Guid auctionCarId, string reason)
+        public async Task<AuctionCarDetailDto> MarkCarUnsoldAsync(Guid auctionCarId, string reason, Guid currentUserId)
         {
-            _logger.LogInformation("❌ Marking car as unsold: {AuctionCarId}, Reason: {Reason}",
+            _logger.LogInformation("❌ Marking car as unsold -., AuctionCarId: {AuctionCarId}, Reason: {Reason}",
                 auctionCarId, reason);
+
+            if (string.IsNullOrWhiteSpace(reason))
+                throw new BadRequestException("Unsold reason is required");
+
             var auctionCar = await _auctionCarRepository.GetByIdAsync(auctionCarId);
             if (auctionCar == null)
             {
+                _logger.LogError("❌ AuctionCar not found for unsold marking: {AuctionCarId} -.", auctionCarId);
                 throw new NotFoundException("AuctionCar", auctionCarId);
             }
-            auctionCar.MarkUnsold();
+
+            auctionCar.MarkUnsold(reason);
+
             await _auctionCarRepository.UpdateAsync(auctionCar);
             await _unitOfWork.SaveChangesAsync();
-            _logger.LogInformation("✅ Car marked as unsold: {LotNumber}, Reason: {Reason}",
+
+            _logger.LogInformation("✅ Car marked as unsold -., Lot: {LotNumber}, Reason: {Reason}",
                 auctionCar.LotNumber, reason);
 
-            return _mapper.Map<AuctionCarDetailDto>(auctionCar);
+            return await GetCarWithFullDetailsAsync(auctionCarId, currentUserId);
         }
+
         #endregion
 
-        #region Pre-Bid Management  
+        #region Pre-Bid Management
+
         public async Task<bool> HasRequiredPreBidsAsync(Guid auctionCarId)
         {
-            var preBidCount = await _auctionCarRepository.GetTotalPreBidCountAsync(auctionCarId);
-            var hasRequiredPreBids = preBidCount > 0;
+            _logger.LogInformation("🔍 Checking pre-bid requirements -., AuctionCarId: {AuctionCarId}", auctionCarId);
 
-            _logger.LogInformation("Pre-bid check for car {AuctionCarId}: {PreBidCount} pre-bids, Pre-bid requirement: OPTIONAL",
-                auctionCarId, preBidCount);
+            var auctionCar = await _auctionCarRepository.GetByIdAsync(auctionCarId);
+            if (auctionCar == null)
+                throw new NotFoundException("AuctionCar", auctionCarId);
+
+            var preBidCount = await _auctionCarRepository.GetTotalPreBidCountAsync(auctionCarId);
+            var hasRequiredPreBids = preBidCount > 0 || auctionCar.StartPrice > 0;
+
+            _logger.LogInformation("📊 Pre-bid check result -., Lot: {LotNumber}, PreBids: {PreBids}, CanStart: {CanStart}",
+                auctionCar.LotNumber, preBidCount, hasRequiredPreBids);
 
             return hasRequiredPreBids;
         }
+
         public async Task<BidDetailDto?> GetHighestPreBidAsync(Guid auctionCarId)
         {
+            _logger.LogInformation("💰 Getting highest pre-bid -., AuctionCarId: {AuctionCarId}", auctionCarId);
+
+            var auctionCar = await _auctionCarRepository.GetByIdAsync(auctionCarId);
+            if (auctionCar == null)
+                throw new NotFoundException("AuctionCar", auctionCarId);
+
             var highestPreBid = await _bidRepository.GetHighestPreBidAsync(auctionCarId);
             if (highestPreBid == null)
             {
-                _logger.LogInformation("No pre-bids found for car: {AuctionCarId}", auctionCarId);
+                _logger.LogInformation("📭 No pre-bids found -., Lot: {LotNumber}", auctionCar.LotNumber);
                 return null;
             }
 
-            _logger.LogInformation("Highest pre-bid for car {AuctionCarId}: ${Amount}",
-                auctionCarId, highestPreBid.Amount);
-
             return _mapper.Map<BidDetailDto>(highestPreBid);
         }
+
         public async Task<bool> HasUserPreBidAsync(Guid auctionCarId, Guid userId)
         {
-            var hasPreBid = await _auctionCarRepository.HasUserPreBid(auctionCarId, userId);
-            _logger.LogInformation("User {UserId} pre-bid check for car {AuctionCarId}: {HasPreBid}",
-                userId, auctionCarId, hasPreBid);
+            var auctionCar = await _auctionCarRepository.GetByIdAsync(auctionCarId);
+            if (auctionCar == null)
+                throw new NotFoundException("AuctionCar", auctionCarId);
 
-            return hasPreBid;
+            return await _auctionCarRepository.HasUserPreBidAsync(auctionCarId, userId);
         }
+
         public async Task<IEnumerable<BidGetDto>> GetPreBidsAsync(Guid auctionCarId)
         {
-            var preBids = await _bidRepository.GetPreBidsAsync(auctionCarId);
-            var dtos = _mapper.Map<IEnumerable<BidGetDto>>(preBids);
-            _logger.LogInformation("Retrieved {Count} pre-bids for car: {AuctionCarId}",
-                preBids.Count(), auctionCarId);
+            var auctionCar = await _auctionCarRepository.GetByIdAsync(auctionCarId);
+            if (auctionCar == null)
+                throw new NotFoundException("AuctionCar", auctionCarId);
 
-            return dtos;
+            var preBids = await _bidRepository.GetPreBidsAsync(auctionCarId);
+            return _mapper.Map<IEnumerable<BidGetDto>>(preBids);
         }
+
         #endregion
 
         #region Price Management
-        public async Task<AuctionCarDetailDto> UpdateCurrentPriceAsync(Guid auctionCarId, decimal newPrice)
+
+        public async Task<AuctionCarDetailDto> UpdateCurrentPriceAsync(Guid auctionCarId, decimal newPrice, Guid bidderId)
         {
-            _logger.LogInformation("💰 Updating current price: {AuctionCarId}, New Price: ${NewPrice}",
+            _logger.LogInformation("💰 Updating current price -., AuctionCarId: {AuctionCarId}, NewPrice: ${NewPrice}",
                 auctionCarId, newPrice);
 
-            var auctionCar = await _auctionCarRepository.GetByIdAsync(auctionCarId);
+            var auctionCar = await _auctionCarRepository.GetAuctionCarWithBidsAsync(auctionCarId);
             if (auctionCar == null)
-            {
                 throw new NotFoundException("AuctionCar", auctionCarId);
-            }
+
+            if (!auctionCar.IsActive)
+                throw new AuctionBusinessException(auctionCar.LotNumber, "Car is not currently active in auction");
+
             if (newPrice <= auctionCar.CurrentPrice)
-            {
-                throw new AuctionBusinessException(auctionCar.LotNumber, "New price must be greater than current price");
-            }
-            var oldPrice = auctionCar.CurrentPrice;
+                throw new BadRequestException($"New bid ${newPrice} must be greater than current price ${auctionCar.CurrentPrice}");
+
+            var nextMinBid = auctionCar.CalculateNextMinimumBid();
+            if (newPrice < nextMinBid)
+                throw new BadRequestException($"Minimum bid increment not met. Required: ${nextMinBid}");
+
             auctionCar.UpdateCurrentPrice(newPrice);
+
             await _auctionCarRepository.UpdateAsync(auctionCar);
             await _unitOfWork.SaveChangesAsync();
-            _logger.LogInformation("✅ Price updated from ${OldPrice} to ${NewPrice} for {LotNumber}",
-               oldPrice, newPrice, auctionCar.LotNumber);
 
-            return _mapper.Map<AuctionCarDetailDto>(auctionCar);
+            _logger.LogInformation("✅ Price updated successfully -., Lot: {LotNumber}, Price: ${NewPrice}",
+               auctionCar.LotNumber, newPrice);
+
+            return await GetCarWithFullDetailsAsync(auctionCarId, bidderId);
         }
+
         public async Task<bool> IsReservePriceMetAsync(Guid auctionCarId)
         {
             var auctionCar = await _auctionCarRepository.GetByIdAsync(auctionCarId);
-            if (auctionCar == null) return false;
-            var isReserveMet = auctionCar.IsReserveMet;
-            _logger.LogInformation("Reserve price check for {AuctionCarId}: Reserve=${Reserve}, Current=${Current}, Met={Met}",
-                auctionCarId, auctionCar.ReservePrice, auctionCar.CurrentPrice, isReserveMet);
+            if (auctionCar == null)
+                throw new NotFoundException("AuctionCar", auctionCarId);
 
-            return isReserveMet;
+            return auctionCar.IsReserveMet;
         }
+
         public async Task<decimal> CalculateNextMinimumBidAsync(Guid auctionCarId)
         {
-            var auctionCar = await _auctionCarRepository.GetAuctionCarWithBidsAsync(auctionCarId);
-            if (auctionCar == null) return 0;
-            var minIncrement = auctionCar.Auction?.MinBidIncrement ?? 100; // Default increment
-            var nextMinBid = auctionCar.CurrentPrice + minIncrement;
-            _logger.LogInformation("Next minimum bid for {LotNumber}: Current=${Current} + Increment=${Increment} = ${NextMin}",
-                auctionCar.LotNumber, auctionCar.CurrentPrice, minIncrement, nextMinBid);
-
-            return nextMinBid;
-        }
-        public async Task<AuctionCarDetailDto> SetHammerPriceAsync(Guid auctionCarId, decimal hammerPrice)
-        {
-            _logger.LogInformation("🔨 Setting hammer price: {AuctionCarId}, Price: ${HammerPrice}",
-                auctionCarId, hammerPrice);
-
             var auctionCar = await _auctionCarRepository.GetByIdAsync(auctionCarId);
             if (auctionCar == null)
-            {
                 throw new NotFoundException("AuctionCar", auctionCarId);
-            }
-            if (hammerPrice <= 0)
-            {
-                throw new BadRequestException("Hammer price must be greater than zero");
-            }
-            auctionCar.SetHammer(hammerPrice);
-            await _auctionCarRepository.UpdateAsync(auctionCar);
-            await _unitOfWork.SaveChangesAsync();
-            _logger.LogInformation("✅ Hammer price set to ${HammerPrice} for {LotNumber} - SOLD!",
-               hammerPrice, auctionCar.LotNumber);
-            return _mapper.Map<AuctionCarDetailDto>(auctionCar);
+
+            return auctionCar.CalculateNextMinimumBid();
         }
+
         #endregion
 
-        #region Timer and Status
+        #region Timer Management
+
         public async Task<AuctionCarTimerDto> GetCarTimerInfoAsync(Guid auctionCarId)
         {
             var auctionCar = await _auctionCarRepository.GetAuctionCarWithBidsAsync(auctionCarId);
             if (auctionCar == null)
-            {
                 throw new NotFoundException("AuctionCar", auctionCarId);
-            }
 
-            var timerSeconds = auctionCar.Auction?.TimerSeconds ?? 10;
+            var auction = await _auctionRepository.GetByIdAsync(auctionCar.AuctionId);
+            var timerSeconds = auction?.TimerSeconds ?? 10;
+
             var isExpired = auctionCar.IsTimeExpired(timerSeconds);
             var remainingTime = 0;
-            if (!isExpired && auctionCar.IsActive)
+
+            if (auctionCar.IsActive && !isExpired)
             {
                 var lastActionTime = auctionCar.LastBidTime ?? auctionCar.ActiveStartTime ?? DateTime.UtcNow;
                 var elapsed = (DateTime.UtcNow - lastActionTime).TotalSeconds;
                 remainingTime = Math.Max(0, (int)(timerSeconds - elapsed));
-                if (remainingTime <= 5)
-                {
-                    remainingTime = Math.Max(0, (int)((timerSeconds * 1000 - (DateTime.UtcNow - lastActionTime).TotalMilliseconds) / 1000));
-                }
             }
 
-            var nextTimeoutAt = auctionCar.LastBidTime?.AddSeconds(timerSeconds);
-
-            var timerDto = new AuctionCarTimerDto
+            return new AuctionCarTimerDto
             {
                 AuctionCarId = auctionCarId,
                 LotNumber = auctionCar.LotNumber,
                 RemainingTimeSeconds = remainingTime,
                 IsExpired = isExpired,
                 LastBidTime = auctionCar.LastBidTime,
-                NextTimeoutAt = nextTimeoutAt,
                 IsActive = auctionCar.IsActive,
                 ShowFinalCall = remainingTime <= 30 && remainingTime > 0,
-                IsInCriticalTime = remainingTime <= 10 && remainingTime > 0
+                IsInCriticalTime = remainingTime <= 10 && remainingTime > 0,
+                CurrentPrice = auctionCar.CurrentPrice,
+                NextMinimumBid = auctionCar.CalculateNextMinimumBid(),
+                IsReserveMet = auctionCar.IsReserveMet
             };
-
-            _logger.LogInformation("Timer info for {LotNumber}: Remaining={Remaining}s, Expired={Expired}, Active={Active}, FinalCall={FinalCall}",
-                auctionCar.LotNumber, remainingTime, isExpired, auctionCar.IsActive, timerDto.ShowFinalCall);
-
-            return timerDto;
         }
-        public async Task UpdateLastBidTimeAsync(Guid auctionCarId, DateTime bidTime)
+
+        public async Task UpdateLastBidTimeAsync(Guid auctionCarId, DateTime bidTime, Guid bidderId)
         {
             var auctionCar = await _auctionCarRepository.GetByIdAsync(auctionCarId);
-            if(auctionCar == null) return;
-            _logger.LogInformation("Timer reset for car {AuctionCarId} at {BidTime}", auctionCarId, bidTime);
+            if (auctionCar == null)
+                throw new NotFoundException("AuctionCar", auctionCarId);
+
+            if (!auctionCar.IsActive)
+                throw new AuctionBusinessException(auctionCar.LotNumber, "Cannot update bid time for inactive car");
+
+            auctionCar.LastBidTime = bidTime;
+            auctionCar.MarkUpdated();
 
             await _auctionCarRepository.UpdateAsync(auctionCar);
             await _unitOfWork.SaveChangesAsync();
         }
+
         public async Task<bool> IsCarTimerExpiredAsync(Guid auctionCarId, int timerSeconds)
         {
             var auctionCar = await _auctionCarRepository.GetByIdAsync(auctionCarId);
-            if(auctionCar == null) return false;
-            var isExpired = auctionCar.IsTimeExpired(timerSeconds);
-            _logger.LogInformation("Timer expiry check for car {AuctionCarId}: Expired={Expired}",
-                auctionCarId, isExpired);
-            return isExpired;
+            if (auctionCar == null)
+                throw new NotFoundException("AuctionCar", auctionCarId);
+
+            return auctionCar.IsTimeExpired(timerSeconds);
         }
+
         #endregion
 
-        #region Statistics and Information
-        public async Task<BidStatsDto> GetCarBidStatsAsync(Guid auctionCarId)
+        #region Post-Auction Management
+
+        public async Task<AuctionCarDetailDto> ApproveWinnerAsync(Guid auctionCarId, Guid sellerId, string? approvalNotes = null)
         {
-            _logger.LogInformation("📊 Generating bid stats for car: {AuctionCarId}", auctionCarId);
+            _logger.LogInformation("✅ Approving winner -., AuctionCarId: {AuctionCarId}, Seller: {SellerId}",
+                auctionCarId, sellerId);
+
+            var auctionCar = await _auctionCarRepository.GetAuctionCarWithFullDetailsAsync(auctionCarId);
+            if (auctionCar == null)
+                throw new NotFoundException("AuctionCar", auctionCarId);
+
+            if (auctionCar.WinnerStatus != AuctionWinnerStatus.AwaitingSellerApproval)
+                throw new AuctionBusinessException(auctionCar.LotNumber, $"Car is not awaiting seller approval");
+
+            if (auctionCar.Car.OwnerId != sellerId.ToString())
+                throw new UnauthorizedException($"User {sellerId} is not the owner of car {auctionCar.LotNumber}");
+
+            auctionCar.ApproveWinner();
+            if (!string.IsNullOrEmpty(approvalNotes))
+                auctionCar.SellerNotes = approvalNotes;
+
+            await _auctionCarRepository.UpdateAsync(auctionCar);
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetCarWithFullDetailsAsync(auctionCarId, sellerId);
+        }
+
+        public async Task<AuctionCarDetailDto> RejectWinnerAsync(Guid auctionCarId, Guid sellerId, string rejectionReason)
+        {
+            if (string.IsNullOrWhiteSpace(rejectionReason))
+                throw new BadRequestException("Rejection reason is required");
+
+            var auctionCar = await _auctionCarRepository.GetAuctionCarWithFullDetailsAsync(auctionCarId);
+            if (auctionCar == null)
+                throw new NotFoundException("AuctionCar", auctionCarId);
+
+            if (auctionCar.WinnerStatus != AuctionWinnerStatus.AwaitingSellerApproval)
+                throw new AuctionBusinessException(auctionCar.LotNumber, $"Car is not awaiting seller approval");
+
+            if (auctionCar.Car.OwnerId != sellerId.ToString())
+                throw new UnauthorizedException($"User {sellerId} is not the owner of car {auctionCar.LotNumber}");
+
+            auctionCar.RejectWinner(rejectionReason);
+
+            await _auctionCarRepository.UpdateAsync(auctionCar);
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetCarWithFullDetailsAsync(auctionCarId, sellerId);
+        }
+
+        public async Task<AuctionCarDetailDto> MarkDepositPaidAsync(Guid auctionCarId, decimal depositAmount, Guid buyerId)
+        {
+            var auctionCar = await _auctionCarRepository.GetAuctionCarWithFullDetailsAsync(auctionCarId);
+            if (auctionCar == null)
+                throw new NotFoundException("AuctionCar", auctionCarId);
+
+            if (auctionCar.WinnerStatus != AuctionWinnerStatus.SellerApproved)
+                throw new AuctionBusinessException(auctionCar.LotNumber, $"Car is not in seller approved status");
+
+            if (depositAmount <= 0)
+                throw new BadRequestException("Deposit amount must be greater than zero");
+
+            var requiredDeposit = (auctionCar.HammerPrice ?? 0) * 0.10m;
+            if (depositAmount < requiredDeposit)
+                throw new BadRequestException($"Minimum deposit of ${requiredDeposit:F2} required");
+
+            if (auctionCar.AuctionWinner?.UserId != buyerId)
+                throw new UnauthorizedException($"User {buyerId} is not the winner of car {auctionCar.LotNumber}");
+
+            auctionCar.MarkDepositPaid();
+
+            await _auctionCarRepository.UpdateAsync(auctionCar);
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetCarWithFullDetailsAsync(auctionCarId, buyerId);
+        }
+
+        public async Task<AuctionCarDetailDto> CompletePaymentAsync(Guid auctionCarId, decimal totalAmount, Guid buyerId)
+        {
+            var auctionCar = await _auctionCarRepository.GetAuctionCarWithFullDetailsAsync(auctionCarId);
+            if (auctionCar == null)
+                throw new NotFoundException("AuctionCar", auctionCarId);
+
+            if (auctionCar.WinnerStatus != AuctionWinnerStatus.DepositPaid)
+                throw new AuctionBusinessException(auctionCar.LotNumber, "Deposit must be paid first");
+
+            if (totalAmount != auctionCar.TotalPrice)
+                throw new BadRequestException($"Payment amount does not match total due");
+
+            if (auctionCar.AuctionWinner?.UserId != buyerId)
+                throw new UnauthorizedException($"User {buyerId} is not the winner");
+
+            auctionCar.CompletePayment();
+
+            await _auctionCarRepository.UpdateAsync(auctionCar);
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetCarWithFullDetailsAsync(auctionCarId, buyerId);
+        }
+
+        #endregion
+
+        #region Lane Management
+
+        public async Task<AuctionCarDetailDto> AssignToLaneAsync(Guid auctionCarId, int laneNumber, int runOrder, DateTime scheduledTime, Guid currentUserId)
+        {
+            var auctionCar = await _auctionCarRepository.GetByIdAsync(auctionCarId);
+            if (auctionCar == null)
+                throw new NotFoundException("AuctionCar", auctionCarId);
+
+            var isAvailable = await _auctionCarRepository.IsLaneSlotAvailableAsync(laneNumber, scheduledTime, runOrder);
+            if (!isAvailable)
+                throw new ConflictException($"Lane {laneNumber} slot {runOrder} is not available");
+
+            auctionCar.LaneNumber = laneNumber;
+            auctionCar.RunOrder = runOrder;
+            auctionCar.ScheduledTime = scheduledTime;
+
+            await _auctionCarRepository.UpdateAsync(auctionCar);
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetCarWithFullDetailsAsync(auctionCarId, currentUserId);
+        }
+
+        public async Task<IEnumerable<AuctionCarGetDto>> GetCarsByLaneAsync(int laneNumber, DateTime? scheduleDate = null)
+        {
+            var cars = await _auctionCarRepository.GetCarsByLaneAsync(laneNumber, scheduleDate);
+            return _mapper.Map<IEnumerable<AuctionCarGetDto>>(cars);
+        }
+
+        #endregion
+
+        #region Statistics
+
+        public async Task<AuctionCarStatsDto> GetCarBidStatsAsync(Guid auctionCarId)
+        {
             var auctionCar = await _auctionCarRepository.GetAuctionCarWithBidsAsync(auctionCarId);
             if (auctionCar == null)
-            {
                 throw new NotFoundException("AuctionCar", auctionCarId);
-            }
+
             var totalBids = await _bidRepository.GetTotalBidCountAsync(auctionCarId);
-            var activeBids = await _bidRepository.GetActiveBidCountAsync(auctionCarId);
             var preBids = auctionCar.Bids.Count(b => b.IsPreBid);
-            var proxyBids = auctionCar.Bids.Count(b => b.IsProxy);
             var uniqueBidders = await _bidRepository.GetUniqueBiddersCountAsync(auctionCarId);
 
-            var allBids = auctionCar.Bids.Where(b => b.Status == Domain.Enums.AuctionEnums.BidStatus.Placed).ToList();
-
-            var highestBid = allBids.Any() ? allBids.Max(b => b.Amount) : 0;
-            var lowestBid = allBids.Any() ? allBids.Min(b => b.Amount) : 0;
-            var averageBid = allBids.Any() ? allBids.Average(b => b.Amount) : 0;
-
-            var firstBidTime = allBids.Any() ? allBids.Min(b => b.PlacedAtUtc) : (DateTime?)null;
-            var lastBidTime = allBids.Any() ? allBids.Max(b => b.PlacedAtUtc) : (DateTime?)null;
-
-            var biddingDuration = firstBidTime.HasValue && lastBidTime.HasValue
-                ? lastBidTime.Value - firstBidTime.Value
-                : (TimeSpan?)null;
-
-            var timeSinceLastBid = lastBidTime.HasValue
-                ? DateTime.UtcNow - lastBidTime.Value
-                : (TimeSpan?)null;
-            var priceIncrease = highestBid - (auctionCar.MinPreBid > 0 ? auctionCar.MinPreBid : highestBid);
-            var priceIncreasePercentage = auctionCar.MinPreBid > 0
-                ? ((highestBid - auctionCar.MinPreBid) / auctionCar.MinPreBid) * 100
-                : 0;
-
-            var bidsPerHour = biddingDuration?.TotalHours > 0
-                ? (decimal)(totalBids / biddingDuration.Value.TotalHours)
-                : 0;
-
-            var averageBidInterval = allBids.Count > 1 && biddingDuration?.TotalMinutes > 0
-                ? (decimal)(biddingDuration.Value.TotalMinutes / (allBids.Count - 1))
-                : 0;
-            string trendDirection = "Stable";
-            if (allBids.Count >= 3)
-            {
-                var recentBids = allBids.OrderBy(b => b.PlacedAtUtc).TakeLast(3).ToList();
-                if (recentBids.Count == 3)
-                {
-                    var trend1 = recentBids[1].Amount - recentBids[0].Amount;
-                    var trend2 = recentBids[2].Amount - recentBids[1].Amount;
-
-                    if (trend1 > 0 && trend2 > 0)
-                        trendDirection = "Up";
-                    else if (trend1 < 0 && trend2 < 0)
-                        trendDirection = "Down";
-                }
-            }
-            var stats = new BidStatsDto
+            return new AuctionCarStatsDto
             {
                 AuctionCarId = auctionCarId,
                 LotNumber = auctionCar.LotNumber,
                 TotalBids = totalBids,
-                UniqueBidders = uniqueBidders,
-                ActiveBids = activeBids,
                 PreBids = preBids,
-                ProxyBids = proxyBids,
+                LiveBids = totalBids - preBids,
+                UniqueBidders = uniqueBidders,
+                StartPrice = auctionCar.StartPrice,
                 CurrentPrice = auctionCar.CurrentPrice,
-                StartingPrice = auctionCar.MinPreBid,
-                HighestBid = highestBid,
-                LowestBid = lowestBid,
-                AverageBid = averageBid,
-                PriceIncrease = priceIncrease,
-                PriceIncreasePercentage = priceIncreasePercentage,
-                FirstBidTime = firstBidTime,
-                LastBidTime = lastBidTime,
-                BiddingDuration = biddingDuration,
-                TimeSinceLastBid = timeSinceLastBid,
-                BidsPerHour = bidsPerHour,
-                AverageBidInterval = averageBidInterval,
-                TrendDirection = trendDirection
+                HighestBid = auctionCar.CurrentPrice,
+                IsReserveMet = auctionCar.IsReserveMet,
+                WinnerStatus = auctionCar.WinnerStatus.ToString(),
+                AuctionCondition = auctionCar.AuctionCondition.ToString()
             };
-
-            _logger.LogInformation("✅ Generated comprehensive stats for {LotNumber}: {TotalBids} bids, {UniqueBidders} bidders",
-                auctionCar.LotNumber, totalBids, uniqueBidders);
-
-            return stats;
         }
-        public async Task<AuctionCarDetailDto> GetCarWithFullDetailsAsync(Guid auctionCarId)
-        {
-            _logger.LogInformation("🔍 Getting car with full details: {AuctionCarId}", auctionCarId);
 
+        public async Task<decimal> GetSellThroughRateAsync(Guid auctionId)
+        {
+            return await _auctionCarRepository.GetSellThroughRateAsync(auctionId);
+        }
+
+        #endregion
+
+        #region Query Methods
+
+        public async Task<AuctionCarDetailDto> GetCarWithFullDetailsAsync(Guid auctionCarId, Guid? currentUserId = null)
+        {
             var auctionCar = await _auctionCarRepository.GetAuctionCarWithFullDetailsAsync(auctionCarId);
             if (auctionCar == null)
-            {
                 throw new NotFoundException("AuctionCar", auctionCarId);
-            }
 
             var dto = _mapper.Map<AuctionCarDetailDto>(auctionCar);
 
-            //  real-time statistics
-            var stats = await GetCarBidStatsAsync(auctionCarId);
-            dto.TotalBidsCount = stats.TotalBids;
-            dto.PreBidsCount = stats.PreBids;
-            dto.HighestPreBidAmount = await _auctionCarRepository.GetHighestPreBidAmountAsync(auctionCarId);
-            dto.HighestBidAmount = stats.HighestBid;
+            // Hide reserve price from buyers
+            if (currentUserId.HasValue && auctionCar.Car.OwnerId != currentUserId.ToString())
+            {
+                dto.ReservePrice = null;
+                dto.ShowReservePrice = false;
+            }
+            else
+            {
+                dto.ShowReservePrice = true;
+            }
+
             if (auctionCar.IsActive)
             {
                 var timerInfo = await GetCarTimerInfoAsync(auctionCarId);
                 dto.RemainingTimeSeconds = timerInfo.RemainingTimeSeconds;
                 dto.IsTimeExpired = timerInfo.IsExpired;
+                dto.NextMinimumBid = timerInfo.NextMinimumBid;
             }
 
-            _logger.LogInformation("✅ Retrieved full details for {LotNumber}", auctionCar.LotNumber);
             return dto;
         }
 
-        public async Task<IEnumerable<AuctionCarGetDto>> GetCarsReadyForAuctionAsync(Guid auctionId)
+        public async Task<IEnumerable<AuctionCarGetDto>> GetCarsByAuctionIdAsync(Guid auctionId, Guid? currentUserId = null)
         {
-            _logger.LogInformation("🚗 Getting cars ready for auction: {AuctionId}", auctionId);
-
-            var carsReady = await _auctionCarRepository.GetAuctionCarsReadyForAuctionAsync(auctionId);
-            var dtos = _mapper.Map<IEnumerable<AuctionCarGetDto>>(carsReady);
-
-            _logger.LogInformation("✅ Found {Count} cars ready for auction {AuctionId}",
-                carsReady.Count(), auctionId);
-
-            return dtos;
-        }
-
-        public async Task<IEnumerable<AuctionCarGetDto>> GetUnsoldCarsAsync(Guid auctionId)
-        {
-            _logger.LogInformation("❌ Getting unsold cars for auction: {AuctionId}", auctionId);
-
-            var unsoldCars = await _auctionCarRepository.GetUnsoldAuctionCarsAsync(auctionId);
-            var dtos = _mapper.Map<IEnumerable<AuctionCarGetDto>>(unsoldCars);
-
-            _logger.LogInformation("Found {Count} unsold cars in auction {AuctionId}",
-                unsoldCars.Count(), auctionId);
-
-            return dtos;
-        }
-        #endregion
-
-        #region Query And Navigation Methods
-        public async Task<IEnumerable<AuctionCarGetDto>> GetCarsByAuctionIdAsync(Guid auctionId)
-        {
-            _logger.LogInformation("🔍 Getting all cars for auction: {AuctionId}", auctionId);
-
             var cars = await _auctionCarRepository.GetByAuctionIdAsync(auctionId);
             var dtos = _mapper.Map<IEnumerable<AuctionCarGetDto>>(cars);
 
-            _logger.LogInformation("✅ Retrieved {Count} cars for auction {AuctionId}",
-                cars.Count(), auctionId);
+            foreach (var dto in dtos)
+            {
+                dto.NextMinimumBid = dto.CurrentPrice switch
+                {
+                    <= 500 => dto.CurrentPrice + 25,
+                    <= 1000 => dto.CurrentPrice + 50,
+                    <= 5000 => dto.CurrentPrice + 100,
+                    <= 10000 => dto.CurrentPrice + 250,
+                    _ => dto.CurrentPrice + 500
+                };
+            }
 
             return dtos;
         }
 
-        public async Task<AuctionCarDetailDto?> GetCarByLotNumberAsync(string lotNumber)
+        public async Task<AuctionCarDetailDto?> GetCarByLotNumberAsync(string lotNumber, Guid? currentUserId = null)
         {
-            _logger.LogInformation("🔍 Getting car by lot number: {LotNumber}", lotNumber);
-
             var auctionCar = await _auctionCarRepository.GetByLotNumberAsync(lotNumber);
             if (auctionCar == null)
-            {
-                _logger.LogInformation("No car found with lot number: {LotNumber}", lotNumber);
                 return null;
-            }
 
-            var dto = _mapper.Map<AuctionCarDetailDto>(auctionCar);
-
-            _logger.LogInformation("✅ Found car: {LotNumber}", lotNumber);
-            return dto;
+            return await GetCarWithFullDetailsAsync(auctionCar.Id, currentUserId);
         }
 
         public async Task<AuctionCarDetailDto?> GetActiveCarForAuctionAsync(Guid auctionId)
         {
-            _logger.LogInformation("🔴 Getting active car for auction: {AuctionId}", auctionId);
-
             var activeCar = await _auctionCarRepository.GetActiveAuctionCarAsync(auctionId);
             if (activeCar == null)
-            {
-                _logger.LogInformation("No active car found for auction: {AuctionId}", auctionId);
                 return null;
-            }
 
-            var dto = _mapper.Map<AuctionCarDetailDto>(activeCar);
-
-            // Add real-time timer info for active car
-            var timerInfo = await GetCarTimerInfoAsync(activeCar.Id);
-            dto.RemainingTimeSeconds = timerInfo.RemainingTimeSeconds;
-            dto.IsTimeExpired = timerInfo.IsExpired;
-
-            _logger.LogInformation("✅ Active car for auction {AuctionId}: {LotNumber}",
-                auctionId, activeCar.LotNumber);
-
-            return dto;
+            return await GetCarWithFullDetailsAsync(activeCar.Id);
         }
 
         public async Task<AuctionCarDetailDto?> GetNextCarForAuctionAsync(Guid auctionId, string currentLotNumber)
         {
-            _logger.LogInformation("⏭️ Getting next car after {CurrentLotNumber} for auction: {AuctionId}",
-                currentLotNumber, auctionId);
-
             var nextCar = await _auctionCarRepository.GetNextAuctionCarAsync(auctionId, currentLotNumber);
             if (nextCar == null)
-            {
-                _logger.LogInformation("No next car found after {CurrentLotNumber} for auction {AuctionId}",
-                    currentLotNumber, auctionId);
                 return null;
-            }
 
-            var dto = _mapper.Map<AuctionCarDetailDto>(nextCar);
-
-            _logger.LogInformation("✅ Next car after {CurrentLotNumber}: {NextLotNumber}",
-                currentLotNumber, nextCar.LotNumber);
-
-            return dto;
+            return await GetCarWithFullDetailsAsync(nextCar.Id);
         }
+
+        public async Task<IEnumerable<AuctionCarGetDto>> GetCarsReadyForAuctionAsync(Guid auctionId)
+        {
+            var carsReady = await _auctionCarRepository.GetCarsReadyForAuctionAsync(auctionId);
+            return _mapper.Map<IEnumerable<AuctionCarGetDto>>(carsReady);
+        }
+
+        public async Task<IEnumerable<AuctionCarGetDto>> GetUnsoldCarsAsync(Guid auctionId)
+        {
+            var unsoldCars = await _auctionCarRepository.GetUnsoldAuctionCarsAsync(auctionId);
+            return _mapper.Map<IEnumerable<AuctionCarGetDto>>(unsoldCars);
+        }
+
+        public async Task<IEnumerable<AuctionCarGetDto>> GetCarsAwaitingApprovalAsync(Guid auctionId)
+        {
+            var awaitingCars = await _auctionCarRepository.GetSoldCarsAwaitingApprovalAsync(auctionId);
+            return _mapper.Map<IEnumerable<AuctionCarGetDto>>(awaitingCars);
+        }
+
+        public async Task<IEnumerable<AuctionCarGetDto>> GetUserWonCarsAsync(Guid userId, Guid auctionId)
+        {
+            var wonCars = await _auctionCarRepository.GetUserWonCarsAsync(userId, auctionId);
+            return _mapper.Map<IEnumerable<AuctionCarGetDto>>(wonCars);
+        }
+
         #endregion
     }
 }

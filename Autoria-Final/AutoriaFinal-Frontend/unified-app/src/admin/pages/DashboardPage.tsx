@@ -1,94 +1,106 @@
 import { useState, useEffect } from 'react'
 import { 
-  TrendingUp, 
-  Users, 
-  Car, 
-  Gavel, 
-  Calendar,
-  Activity,
-  Plus,
-  FileText,
-  BarChart3
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts'
+import { 
+  Play, 
+  Settings, 
+  Clock, 
+  CheckCircle, 
+  XCircle, 
+  AlertCircle,
+  Loader2,
+  RefreshCw,
+  Download,
+  Plus
 } from 'lucide-react'
+import { KPICard } from '../components/ui/KPICard'
+import { Button } from '../components/common/Button'
 import { apiClient } from '../services/apiClient'
+import { useToast } from '../components/common/Toast'
 
 interface DashboardStats {
-  totalRevenue: number
-  activeAuctions: number
-  totalVehicles: number
-  registeredUsers: number
+  draft: number
+  scheduled: number
+  ready: number
+  running: number
+  ended: number
+  cancelled: number
 }
 
-interface ActivityItem {
-  id: string
-  type: string
-  message: string
-  timestamp: string
-  icon: string
-}
-
-interface UpcomingAuction {
-  id: string
-  name: string
-  startTime: string
-  vehicleCount: number
-  location: string
+interface SchedulerDebug {
+  lastRun: string
+  nextRun: string
+  status: string
+  isRunning: boolean
 }
 
 export function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [activities, setActivities] = useState<ActivityItem[]>([])
-  const [upcomingAuctions, setUpcomingAuctions] = useState<UpcomingAuction[]>([])
+  const [schedulerDebug, setSchedulerDebug] = useState<SchedulerDebug | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    loadDashboardData()
-  }, [])
+  const { success, error: showError } = useToast()
 
   const loadDashboardData = async () => {
     try {
       setLoading(true)
       setError(null)
-
-      const [statsData, activitiesData, auctionsData] = await Promise.all([
-        apiClient.getStatsOverview(),
-        apiClient.getRecentActivity(),
-        apiClient.getUpcomingAuctions()
+      
+      const [statsData, schedulerData] = await Promise.all([
+        apiClient.getDashboardStats(),
+        apiClient.getSchedulerDebug()
       ])
-
+      
       setStats(statsData)
-      setActivities(activitiesData)
-      setUpcomingAuctions(auctionsData)
-    } catch (err: any) {
-      console.error('Error loading dashboard data:', err)
-      setError(err.message || 'Failed to load dashboard data')
+      setSchedulerDebug(schedulerData)
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err)
+      setError('Failed to load dashboard data')
+      showError('Failed to load dashboard data')
     } finally {
       setLoading(false)
     }
   }
+
+  const handleForceSchedulerRun = async () => {
+    try {
+      await apiClient.forceSchedulerRun()
+      success('Scheduler run initiated successfully')
+      // Refresh scheduler debug data
+      const schedulerData = await apiClient.getSchedulerDebug()
+      setSchedulerDebug(schedulerData)
+    } catch (err) {
+      console.error('Failed to force scheduler run:', err)
+      showError('Failed to force scheduler run')
+    }
+  }
+
+  useEffect(() => {
+    loadDashboardData()
+  }, [])
+
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-            <p className="text-gray-600">Loading dashboard data...</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                  <div className="h-8 bg-gray-200 rounded mb-2"></div>
-                  <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-                </div>
-                <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
-              </div>
-            </div>
+      <div className="space-y-6 animate-pulse">
+        <div className="h-8 bg-dark-bg-tertiary rounded-lg w-1/4"></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-32 bg-dark-bg-tertiary rounded-lg"></div>
           ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="h-80 bg-dark-bg-tertiary rounded-lg"></div>
+          <div className="h-80 bg-dark-bg-tertiary rounded-lg"></div>
         </div>
       </div>
     )
@@ -96,205 +108,199 @@ export function DashboardPage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-            <p className="text-red-600">Error: {error}</p>
-          </div>
-          <button 
-            onClick={loadDashboardData}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-          >
-            Retry
-          </button>
-        </div>
+      <div className="text-center py-12">
+        <AlertCircle className="w-12 h-12 text-accent-error mx-auto mb-4" />
+        <h3 className="text-h3 font-heading text-dark-text-primary mb-2">Error Loading Dashboard</h3>
+        <p className="text-body-md text-dark-text-secondary mb-6">{error}</p>
+        <Button onClick={loadDashboardData} icon={RefreshCw}>
+          Try Again
+        </Button>
       </div>
     )
   }
 
+  const chartData = stats ? [
+    { name: 'Draft', value: stats.draft, color: '#6B7280' },
+    { name: 'Scheduled', value: stats.scheduled, color: '#F59E0B' },
+    { name: 'Ready', value: stats.ready, color: '#3B82F6' },
+    { name: 'Running', value: stats.running, color: '#10B981' },
+    { name: 'Ended', value: stats.ended, color: '#8B5CF6' },
+    { name: 'Cancelled', value: stats.cancelled, color: '#EF4444' }
+  ] : []
+
+  const barChartData = stats ? [
+    { status: 'Draft', count: stats.draft },
+    { status: 'Scheduled', count: stats.scheduled },
+    { status: 'Ready', count: stats.ready },
+    { status: 'Running', count: stats.running },
+    { status: 'Ended', count: stats.ended },
+    { status: 'Cancelled', count: stats.cancelled }
+  ] : []
+
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header - Exact match to image_80738e.png */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-          <p className="text-gray-600">Welcome back! Here's what's happening with your auctions.</p>
+          <h1 className="text-h1 font-heading text-dark-text-primary">Dashboard</h1>
+          <p className="text-body-md text-dark-text-secondary mt-1">Welcome back!</p>
         </div>
-        <div className="flex space-x-3">
-          <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
+        <div className="flex items-center space-x-3">
+          <Button variant="secondary" icon={Download}>
             Export Report
-          </button>
-          <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+          </Button>
+          <Button icon={Plus}>
             New Auction
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Overview</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  ${stats?.totalRevenue?.toLocaleString() || '0'}
-                </p>
-                <p className="text-sm text-green-600">Real-time data</p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Active Auctions</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats?.activeAuctions || 0}
-                </p>
-                <p className="text-sm text-green-600">Currently running</p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Gavel className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Vehicles</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats?.totalVehicles?.toLocaleString() || '0'}
-                </p>
-                <p className="text-sm text-green-600">In inventory</p>
-              </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Car className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Registered Users</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats?.registeredUsers?.toLocaleString() || '0'}
-                </p>
-                <p className="text-sm text-green-600">Active users</p>
-              </div>
-              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                <Users className="w-6 h-6 text-orange-600" />
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* KPI Cards - Exact match to image_80738e.png */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <KPICard
+          title="Draft"
+          value={stats?.draft || 0}
+          subtitle="In preparation"
+          icon={Settings}
+        />
+        <KPICard
+          title="Scheduled"
+          value={stats?.scheduled || 0}
+          subtitle="Ready to start"
+          icon={Clock}
+        />
+        <KPICard
+          title="Ready"
+          value={stats?.ready || 0}
+          subtitle="Ready to start"
+          icon={CheckCircle}
+        />
+        <KPICard
+          title="Running"
+          value={stats?.running || 0}
+          subtitle="Currently active"
+          icon={Play}
+        />
+        <KPICard
+          title="Ended"
+          value={stats?.ended || 0}
+          subtitle="Completed"
+          icon={CheckCircle}
+        />
+        <KPICard
+          title="Cancelled"
+          value={stats?.cancelled || 0}
+          subtitle="Cancelled"
+          icon={XCircle}
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Activity */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
-              <button className="text-sm text-blue-600 hover:text-blue-700">
-                View All
-              </button>
-            </div>
-            
-            {activities.length > 0 ? (
-              <div className="space-y-4">
-                {activities.map((activity) => (
-                  <div key={activity.id} className="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg">
-                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                      {activity.icon === 'Gavel' ? (
-                        <Gavel className="w-5 h-5 text-blue-600" />
-                      ) : activity.icon === 'TrendingUp' ? (
-                        <TrendingUp className="w-5 h-5 text-green-600" />
-                      ) : (
-                        <Activity className="w-5 h-5 text-blue-600" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">{activity.message}</p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(activity.timestamp).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Bar Chart */}
+        <div className="bg-dark-bg-tertiary rounded-lg border border-dark-border p-6">
+          <h3 className="text-h3 font-heading text-dark-text-primary mb-6">Auction Status Distribution</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={barChartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis 
+                dataKey="status" 
+                stroke="#9CA3AF"
+                fontSize={12}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis 
+                stroke="#9CA3AF"
+                fontSize={12}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip 
+                contentStyle={{
+                  backgroundColor: '#374151',
+                  border: '1px solid #4B5563',
+                  borderRadius: '8px',
+                  color: '#D1D5DB'
+                }}
+              />
+              <Bar dataKey="count" fill="#10B981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Pie Chart */}
+        <div className="bg-dark-bg-tertiary rounded-lg border border-dark-border p-6">
+          <h3 className="text-h3 font-heading text-dark-text-primary mb-6">Status Breakdown</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={chartData}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={120}
+                paddingAngle={5}
+                dataKey="value"
+              >
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <Activity className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">No recent activity</p>
-                <p className="text-sm text-gray-400">Activity will appear here as users interact with the platform</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Upcoming Auctions */}
-        <div>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">Upcoming Auctions</h3>
-              <button className="text-sm text-blue-600 hover:text-blue-700">
-                View All
-              </button>
-            </div>
-            
-            {upcomingAuctions.length > 0 ? (
-              <div className="space-y-4">
-                {upcomingAuctions.map((auction) => (
-                  <div key={auction.id} className="p-3 bg-gray-50 rounded-lg">
-                    <p className="text-sm font-medium text-gray-900">{auction.name}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(auction.startTime).toLocaleString()}
-                    </p>
-                    <p className="text-xs text-gray-500">{auction.vehicleCount} vehicles</p>
-                    <p className="text-xs text-gray-500">{auction.location}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">No upcoming auctions</p>
-                <p className="text-sm text-gray-400">Scheduled auctions will appear here</p>
-              </div>
-            )}
-          </div>
+              </Pie>
+              <Tooltip 
+                contentStyle={{
+                  backgroundColor: '#374151',
+                  border: '1px solid #4B5563',
+                  borderRadius: '8px',
+                  color: '#D1D5DB'
+                }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-6">Quick Actions</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <button className="h-20 flex flex-col items-center justify-center space-y-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
-            <Car className="w-6 h-6 text-gray-600" />
-            <span className="text-sm font-medium text-gray-700">Add Vehicle</span>
-          </button>
-          <button className="h-20 flex flex-col items-center justify-center space-y-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
-            <Gavel className="w-6 h-6 text-gray-600" />
-            <span className="text-sm font-medium text-gray-700">Create Auction</span>
-          </button>
-          <button className="h-20 flex flex-col items-center justify-center space-y-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
-            <Users className="w-6 h-6 text-gray-600" />
-            <span className="text-sm font-medium text-gray-700">Manage Users</span>
-          </button>
-          <button className="h-20 flex flex-col items-center justify-center space-y-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
-            <BarChart3 className="w-6 h-6 text-gray-600" />
-            <span className="text-sm font-medium text-gray-700">View Reports</span>
-          </button>
+      {/* System Maintenance Widget - Exact match to image_80738f.png */}
+      <div className="bg-dark-bg-tertiary rounded-lg border border-dark-border p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-h3 font-heading text-dark-text-primary">System Maintenance</h3>
+          <Button 
+            variant="secondary" 
+            icon={RefreshCw}
+            onClick={handleForceSchedulerRun}
+            disabled={schedulerDebug?.isRunning}
+          >
+            Force Run Scheduler
+          </Button>
         </div>
+        
+        {schedulerDebug && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <p className="text-body-sm text-dark-text-muted">Last Run</p>
+              <p className="text-body-md text-dark-text-primary">
+                {new Date(schedulerDebug.lastRun).toLocaleString()}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <p className="text-body-sm text-dark-text-muted">Next Run</p>
+              <p className="text-body-md text-dark-text-primary">
+                {new Date(schedulerDebug.nextRun).toLocaleString()}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <p className="text-body-sm text-dark-text-muted">Status</p>
+              <div className="flex items-center space-x-2">
+                <div className={`w-2 h-2 rounded-full ${
+                  schedulerDebug.isRunning ? 'bg-accent-success animate-pulse' : 'bg-dark-text-muted'
+                }`} />
+                <p className="text-body-md text-dark-text-primary">
+                  {schedulerDebug.isRunning ? 'Running' : 'Idle'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

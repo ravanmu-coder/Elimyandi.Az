@@ -109,11 +109,11 @@ const AuctionCard: React.FC<AuctionCardProps> = ({
                 View List
               </Link>
               <Link
-                to={`/auctions/${auction.id}/join`}
+                to={`/auctions/${auction.id}`}
                 className="inline-flex items-center justify-center px-3 py-2 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-all duration-200 hover:scale-105 shadow-sm"
               >
                 <Play className="h-3 w-3 mr-1" />
-                Join Auction
+                View Auction
               </Link>
             </div>
           </div>

@@ -30,6 +30,19 @@ namespace AutoriaFinal.Contract.Dtos.Auctions.Auction
         public int UnsoldCarsCount { get; set; }
         public decimal TotalSalesAmount { get; set; }
 
+        // ✅ YENİ property-lər əlavə et
+        public DateTime? PreBidStartTimeUtc { get; set; }
+        public DateTime? PreBidEndTimeUtc { get; set; }
+        public bool AutoStart { get; set; }
+
+       
+
+        // ✅ Real-time məlumatlar
+        public bool IsReadyToStart { get; set; }
+        public bool IsReadyToMakeReady { get; set; }
+        public TimeSpan? TimeUntilStart { get; set; }
+        public TimeSpan? TimeUntilEnd { get; set; }
+
         public ICollection<AuctionCarGetDto> AuctionCars { get; set; } = new List<AuctionCarGetDto>();
     }
 }

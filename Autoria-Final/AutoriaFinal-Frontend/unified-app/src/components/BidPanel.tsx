@@ -117,6 +117,7 @@ export const BidPanel: React.FC<BidPanelProps> = ({
             auctionCarId,
             amount: bidAmount
           });
+          console.log('response', response);
           break;
         case 'proxy':
           response = await apiClient.placeProxyBid({

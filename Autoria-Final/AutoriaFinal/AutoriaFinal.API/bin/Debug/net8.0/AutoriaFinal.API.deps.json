@@ -255,6 +255,14 @@
           }
         }
       },
+      "Microsoft.AspNetCore.Authentication.Google/8.0.19": {
+        "runtime": {
+          "lib/net8.0/Microsoft.AspNetCore.Authentication.Google.dll": {
+            "assemblyVersion": "8.0.19.0",
+            "fileVersion": "8.0.1925.37204"
+          }
+        }
+      },
       "Microsoft.AspNetCore.Authentication.JwtBearer/8.0.19": {
         "dependencies": {
           "Microsoft.IdentityModel.Protocols.OpenIdConnect": "7.1.2"
@@ -1421,7 +1429,8 @@
         "dependencies": {
           "AutoMapper": "15.0.1",
           "AutoriaFinal.Contract": "1.0.0",
-          "AutoriaFinal.Infrastructure": "1.0.0"
+          "AutoriaFinal.Infrastructure": "1.0.0",
+          "Microsoft.AspNetCore.Authentication.Google": "8.0.19"
         },
         "runtime": {
           "AutoriaFinal.Application.dll": {
@@ -1621,6 +1630,13 @@
       "sha512": "sha512-lQKvtaTDOXnoVJ20ibTuSIOf2i0uO0MPbDhd1jm238I+U/2ZnRENj0cktKZhtchBMtCUSRQ5v4xBCUbKNmyVMw==",
       "path": "humanizer.core/2.14.1",
       "hashPath": "humanizer.core.2.14.1.nupkg.sha512"
+    },
+    "Microsoft.AspNetCore.Authentication.Google/8.0.19": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-FbnDLVjNTfKOoh+qV61tzqB7Vjj4WbfBpeGeGPwv03q0QmvnD+idPJV8bAk39RNG1x9AbMPHebMeRdxcv2mk0g==",
+      "path": "microsoft.aspnetcore.authentication.google/8.0.19",
+      "hashPath": "microsoft.aspnetcore.authentication.google.8.0.19.nupkg.sha512"
     },
     "Microsoft.AspNetCore.Authentication.JwtBearer/8.0.19": {
       "type": "package",
