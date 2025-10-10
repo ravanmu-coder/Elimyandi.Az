@@ -299,7 +299,7 @@ namespace AutoriaFinal.Persistence.Migrations
                     b.Property<DateTime>("AssignedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2")
-                        .HasDefaultValue(new DateTime(2025, 10, 5, 22, 15, 44, 935, DateTimeKind.Utc).AddTicks(1287));
+                        .HasDefaultValue(new DateTime(2025, 10, 8, 16, 16, 39, 106, DateTimeKind.Utc).AddTicks(1680));
 
                     b.Property<Guid>("AuctionCarId")
                         .HasColumnType("uniqueidentifier");
@@ -549,15 +549,25 @@ namespace AutoriaFinal.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<int>("CarCondition")
+                        .HasColumnType("int");
+
                     b.Property<string>("Color")
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
-                    b.Property<int>("Condition")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)")
+                        .HasDefaultValue("AZN");
+
+                    b.Property<int>("DamageType")
+                        .HasColumnType("int");
 
                     b.Property<int>("DriveTrain")
                         .HasColumnType("int");
@@ -565,11 +575,13 @@ namespace AutoriaFinal.Persistence.Migrations
                     b.Property<decimal?>("EstimatedRetailValue")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<int>("Fuel")
+                    b.Property<int>("FuelType")
                         .HasColumnType("int");
 
                     b.Property<bool>("HasKeys")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
@@ -582,18 +594,20 @@ namespace AutoriaFinal.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<int>("Mileage")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MileageUnit")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasDefaultValue("km");
+
                     b.Property<string>("Model")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
-
-                    b.Property<int?>("Odometer")
-                        .HasColumnType("int");
-
-                    b.Property<string>("OdometerUnit")
-                        .IsRequired()
-                        .HasMaxLength(2)
-                        .HasColumnType("nvarchar(2)");
 
                     b.Property<string>("OwnerId")
                         .IsRequired()
@@ -601,12 +615,15 @@ namespace AutoriaFinal.Persistence.Migrations
 
                     b.Property<string>("PhotoUrls")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)")
+                        .HasDefaultValue("");
 
-                    b.Property<int>("PrimaryDamage")
-                        .HasColumnType("int");
+                    b.Property<decimal>("Price")
+                        .HasColumnType("decimal(18,2)");
 
-                    b.Property<int>("SecondaryDamage")
+                    b.Property<int?>("SecondaryDamage")
                         .HasColumnType("int");
 
                     b.Property<string>("TitleState")
@@ -624,7 +641,10 @@ namespace AutoriaFinal.Persistence.Migrations
 
                     b.Property<string>("VideoUrls")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)")
+                        .HasDefaultValue("");
 
                     b.Property<string>("Vin")
                         .IsRequired()
@@ -636,12 +656,22 @@ namespace AutoriaFinal.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CarCondition");
+
+                    b.HasIndex("FuelType");
+
                     b.HasIndex("LocationId");
 
                     b.HasIndex("OwnerId");
 
+                    b.HasIndex("Price");
+
                     b.HasIndex("Vin")
                         .IsUnique();
+
+                    b.HasIndex("Year");
+
+                    b.HasIndex("Make", "Model");
 
                     b.ToTable("Cars");
                 });

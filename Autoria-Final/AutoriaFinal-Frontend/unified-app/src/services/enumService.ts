@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiClient } from '../admin/services/apiClient';
 
 // Types for enum metadata
 export interface EnumMapping {
@@ -48,55 +47,59 @@ const FALLBACK_ENUMS: EnumMetadata = {
     '4': 'AutoBid'
   },
   CarCondition: {
-    '0': 'Unknown',
-    '1': 'RunAndDrive',
-    '2': 'EngineStartProgram',
-    '3': 'NoStart',
-    '4': 'PartsOnly'
+    '0': 'Naməlum',
+    '1': 'İşləyir və Sürülür',
+    '2': 'Mühərrik Başlatma Proqramı',
+    '3': 'Təkmilləşdirilmiş',
+    '4': 'Stasionar'
   },
   DamageType: {
-    '0': 'Unknown',
-    '1': 'FrontEnd',
-    '2': 'RearEnd', 
-    '3': 'Side',
-    '4': 'AllOver',
-    '5': 'Hail',
-    '6': 'Flood',
-    '7': 'Fire',
-    '8': 'Vandalism',
-    '9': 'NormalWear'
+    '0': 'Naməlum',
+    '1': 'Ön Hissə',
+    '2': 'Arxa Hissə',
+    '3': 'Yan Tərəf',
+    '4': 'Kiçik Batıq/Cızıqlar',
+    '5': 'Normal Aşınma',
+    '6': 'Hər Tərəfli',
+    '7': 'Dolu',
+    '8': 'Vandalizm',
+    '9': 'Su/Sel',
+    '10': 'Yanma',
+    '11': 'Mexaniki',
+    '12': 'Dam',
+    '13': 'Alt Hissə'
   },
   DriveTrain: {
-    '0': 'Unknown',
-    '1': 'FWD',
-    '2': 'RWD',
-    '3': 'AWD',
-    '4': '4WD'
+    '0': 'Naməlum',
+    '1': 'Ön Təkər',
+    '2': 'Arxa Təkər',
+    '3': 'Tam Ötürücü',
+    '4': 'Dörd Təkər'
   },
   FuelType: {
-    '0': 'Unknown',
-    '1': 'Gasoline',
-    '2': 'Diesel',
-    '3': 'Electric',
-    '4': 'Hybrid',
-    '5': 'Other'
+    '0': 'Naməlum',
+    '1': 'Benzin',
+    '2': 'Dizel',
+    '3': 'Hibrid',
+    '4': 'Elektrik',
+    '5': 'LPG',
+    '6': 'CNG',
+    '7': 'Digər'
   },
   TitleType: {
-    '0': 'Unknown',
-    '1': 'Clean',
+    '0': 'Naməlum',
+    '1': 'Təmiz',
     '2': 'Salvage',
-    '3': 'Rebuilt',
-    '4': 'Flood',
-    '5': 'Fire',
-    '6': 'Lemon',
-    '7': 'Other'
+    '3': 'Təmir Edilməz',
+    '4': 'Məhv Sertifikatı',
+    '5': 'Yenidən Qurulmuş',
+    '6': 'Zibil'
   },
   Transmission: {
-    '0': 'Unknown',
-    '1': 'Manual',
-    '2': 'Automatic',
-    '3': 'CVT',
-    '4': 'SemiAutomatic'
+    '0': 'Naməlum',
+    '1': 'Avtomatik',
+    '2': 'Mexaniki',
+    '3': 'CVT'
   }
 };
 
@@ -125,20 +128,24 @@ const ENUM_UI_MAPPING: EnumUiMapping = {
     '0': { color: 'gray', bgColor: 'bg-gray-100', textColor: 'text-gray-800' },
     '1': { color: 'green', bgColor: 'bg-green-100', textColor: 'text-green-800' },
     '2': { color: 'yellow', bgColor: 'bg-yellow-100', textColor: 'text-yellow-800' },
-    '3': { color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' },
-    '4': { color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800' }
+    '3': { color: 'blue', bgColor: 'bg-blue-100', textColor: 'text-blue-800' },
+    '4': { color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' }
   },
   DamageType: {
     '0': { color: 'gray', bgColor: 'bg-gray-100', textColor: 'text-gray-800' },
     '1': { color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' },
     '2': { color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' },
     '3': { color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800' },
-    '4': { color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' },
-    '5': { color: 'yellow', bgColor: 'bg-yellow-100', textColor: 'text-yellow-800' },
-    '6': { color: 'blue', bgColor: 'bg-blue-100', textColor: 'text-blue-800' },
-    '7': { color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' },
+    '4': { color: 'yellow', bgColor: 'bg-yellow-100', textColor: 'text-yellow-800' },
+    '5': { color: 'green', bgColor: 'bg-green-100', textColor: 'text-green-800' },
+    '6': { color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' },
+    '7': { color: 'yellow', bgColor: 'bg-yellow-100', textColor: 'text-yellow-800' },
     '8': { color: 'purple', bgColor: 'bg-purple-100', textColor: 'text-purple-800' },
-    '9': { color: 'green', bgColor: 'bg-green-100', textColor: 'text-green-800' }
+    '9': { color: 'blue', bgColor: 'bg-blue-100', textColor: 'text-blue-800' },
+    '10': { color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' },
+    '11': { color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800' },
+    '12': { color: 'indigo', bgColor: 'bg-indigo-100', textColor: 'text-indigo-800' },
+    '13': { color: 'gray', bgColor: 'bg-gray-100', textColor: 'text-gray-800' }
   },
   DriveTrain: {
     '0': { color: 'gray', bgColor: 'bg-gray-100', textColor: 'text-gray-800' },
@@ -151,26 +158,26 @@ const ENUM_UI_MAPPING: EnumUiMapping = {
     '0': { color: 'gray', bgColor: 'bg-gray-100', textColor: 'text-gray-800' },
     '1': { color: 'blue', bgColor: 'bg-blue-100', textColor: 'text-blue-800' },
     '2': { color: 'green', bgColor: 'bg-green-100', textColor: 'text-green-800' },
-    '3': { color: 'cyan', bgColor: 'bg-cyan-100', textColor: 'text-cyan-800' },
-    '4': { color: 'emerald', bgColor: 'bg-emerald-100', textColor: 'text-emerald-800' },
-    '5': { color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800' }
+    '3': { color: 'emerald', bgColor: 'bg-emerald-100', textColor: 'text-emerald-800' },
+    '4': { color: 'cyan', bgColor: 'bg-cyan-100', textColor: 'text-cyan-800' },
+    '5': { color: 'purple', bgColor: 'bg-purple-100', textColor: 'text-purple-800' },
+    '6': { color: 'indigo', bgColor: 'bg-indigo-100', textColor: 'text-indigo-800' },
+    '7': { color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800' }
   },
   TitleType: {
     '0': { color: 'gray', bgColor: 'bg-gray-100', textColor: 'text-gray-800' },
     '1': { color: 'green', bgColor: 'bg-green-100', textColor: 'text-green-800' },
     '2': { color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' },
-    '3': { color: 'yellow', bgColor: 'bg-yellow-100', textColor: 'text-yellow-800' },
-    '4': { color: 'blue', bgColor: 'bg-blue-100', textColor: 'text-blue-800' },
-    '5': { color: 'red', bgColor: 'bg-red-100', textColor: 'text-red-800' },
-    '6': { color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800' },
-    '7': { color: 'purple', bgColor: 'bg-purple-100', textColor: 'text-purple-800' }
+    '3': { color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800' },
+    '4': { color: 'purple', bgColor: 'bg-purple-100', textColor: 'text-purple-800' },
+    '5': { color: 'blue', bgColor: 'bg-blue-100', textColor: 'text-blue-800' },
+    '6': { color: 'yellow', bgColor: 'bg-yellow-100', textColor: 'text-yellow-800' }
   },
   Transmission: {
     '0': { color: 'gray', bgColor: 'bg-gray-100', textColor: 'text-gray-800' },
     '1': { color: 'blue', bgColor: 'bg-blue-100', textColor: 'text-blue-800' },
     '2': { color: 'green', bgColor: 'bg-green-100', textColor: 'text-green-800' },
-    '3': { color: 'purple', bgColor: 'bg-purple-100', textColor: 'text-purple-800' },
-    '4': { color: 'indigo', bgColor: 'bg-indigo-100', textColor: 'text-indigo-800' }
+    '3': { color: 'purple', bgColor: 'bg-purple-100', textColor: 'text-purple-800' }
   }
 };
 
@@ -229,57 +236,26 @@ export const useEnums = () => {
     setError(null);
 
     try {
-      console.log('Loading enums from API...');
+      console.log('Using fallback enum mappings (no API endpoints available)');
       
-      // Try multiple endpoints for enum metadata
-      let enumData = null;
+      // Since backend doesn't have enum endpoints, use fallback mappings directly
+      setEnums(FALLBACK_ENUMS);
+      setCachedEnums(FALLBACK_ENUMS);
+      setLastFetch(new Date());
+      setError('Using fallback data - API endpoints not available');
       
-      try {
-        // First try the admin enums endpoint
-        enumData = await apiClient.getEnums();
-        console.log('Enums loaded from /api/admin/enums:', enumData);
-      } catch (adminError) {
-        console.log('Admin enums endpoint failed, trying metadata endpoint...');
-        
-        try {
-          // Try the metadata enums endpoint
-          enumData = await apiClient.request<any>('/api/metadata/enums');
-          console.log('Enums loaded from /api/metadata/enums:', enumData);
-        } catch (metadataError) {
-          console.log('Metadata enums endpoint failed, trying /api/enums...');
-          
-          try {
-            // Try the general enums endpoint
-            enumData = await apiClient.request<any>('/api/enums');
-            console.log('Enums loaded from /api/enums:', enumData);
-          } catch (generalError) {
-            console.log('All enum endpoints failed, using fallback mappings');
-            throw new Error('No enum endpoints available');
-          }
-        }
-      }
-      
-      if (enumData) {
-        console.log('Enums loaded successfully:', enumData);
-        setEnums(enumData);
-        setCachedEnums(enumData);
-        setLastFetch(new Date());
-        setError(null);
-        return enumData;
-      } else {
-        throw new Error('No enum data received');
-      }
+      return FALLBACK_ENUMS;
     } catch (err: any) {
       console.error('Failed to load enums:', err);
       
       // Use cached data if available, otherwise fallback
       const cached = getCachedEnums();
       if (cached) {
-        console.log('Using cached enums due to API error');
+        console.log('Using cached enums due to error');
         setEnums(cached);
         setError('Using cached data - API unavailable');
       } else {
-        console.log('Using fallback enums due to API error');
+        console.log('Using fallback enums due to error');
         setEnums(FALLBACK_ENUMS);
         setError('API unavailable - using fallback data');
       }

@@ -119,7 +119,7 @@ namespace AutoriaFinal.Application.Profiles
             CreateMap<AuctionCarUpdateDto, AuctionCar>().ReverseMap();
             CreateMap<AuctionCar, AuctionCarTimerDto>().ReverseMap();
             #endregion
-             #region Bids
+            #region Bids
             // Create
             CreateMap<BidCreateDto, Bid>()
                 .ForMember(dest => dest.Id, opt => opt.Ignore()) // Entity-də yaranır
@@ -164,80 +164,212 @@ namespace AutoriaFinal.Application.Profiles
                 .ReverseMap();
 
             #endregion
-            #region Car
+            #region Car - ✅ TAM YENİLƏNMİŞ MAPPING
+
+            // ========== CarGetDto Mapping ==========
             CreateMap<Car, CarGetDto>()
-    // existing mapping for ImagePath (keçmişdə artıq var)
-    .ForMember(dest => dest.ImagePath, opt => opt.MapFrom(src =>
-        !string.IsNullOrEmpty(src.PhotoUrls)
-            ? src.PhotoUrls.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
-            : src.PhotoUrls))
-    // NEW: thumbnail url (prioritet: explicit thumbnail if present, else first photo)
-    .ForMember(dest => dest.ThumbnailUrl, opt => opt.MapFrom(src =>
-        !string.IsNullOrEmpty(src.PhotoUrls)
-            ? src.PhotoUrls.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).FirstOrDefault()
-            : src.PhotoUrls))
-    // NEW: images array if you want mapper to provide it
-    .ForMember(dest => dest.Images, opt => opt.MapFrom(src =>
-        !string.IsNullOrEmpty(src.PhotoUrls)
-            ? src.PhotoUrls.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToArray()
-            : Array.Empty<string>()))
-    // Owner fields (requires Car entity has nav property Owner)
-    .ForMember(dest => dest.OwnerName, opt => opt.MapFrom(src => src.Owner != null ? (src.Owner.FirstName + " " + src.Owner.LastName).Trim() : null))
-    .ForMember(dest => dest.OwnerContact, opt => opt.MapFrom(src => src.Owner != null ? (src.Owner.PhoneNumber ?? src.Owner.Email) : null))
-    // Location fields
-    .ForMember(dest => dest.LocationName, opt => opt.MapFrom(src => src.Location != null ? src.Location.Name : null))
-    .ForMember(dest => dest.LocationAddress, opt => opt.MapFrom(src => src.Location != null ? src.Location.AddressLine1 : null))
-    // Status & available for auction (compute logic, default fallback)
-    //.ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.s.ToString())) // if Car has Status enum
-    //.ForMember(dest => dest.IsAvailableForAuction, opt => opt.MapFrom(src =>
-    //    // example logic: available if Status == Available and not sold
-    //    src.Status == CarStatus.Available && !src.IsDeleted))
-    // ignore writes back to entity
-    .ReverseMap()
-    .ForMember(src => src.PhotoUrls, opt => opt.Ignore())
-    .ForMember(src => src.OwnerId, opt => opt.Ignore());
+                // Basic properties - direct mapping
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Vin, opt => opt.MapFrom(src => src.Vin))
+                .ForMember(dest => dest.VinMasked, opt => opt.MapFrom(src =>
+                    src.Vin.Length >= 8 ? $"{src.Vin.Substring(0, 4)}****{src.Vin.Substring(src.Vin.Length - 4)}" : src.Vin))
+                .ForMember(dest => dest.Year, opt => opt.MapFrom(src => src.Year))
+                .ForMember(dest => dest.Make, opt => opt.MapFrom(src => src.Make))
+                .ForMember(dest => dest.Model, opt => opt.MapFrom(src => src.Model))
+                .ForMember(dest => dest.BodyStyle, opt => opt.MapFrom(src => src.BodyStyle))
+                .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color))
 
+                // ✅ Direct mapping - same field names now
+                .ForMember(dest => dest.Mileage, opt => opt.MapFrom(src => src.Mileage))
+                .ForMember(dest => dest.MileageUnit, opt => opt.MapFrom(src => src.MileageUnit))
+                .ForMember(dest => dest.Price, opt => opt.MapFrom(src => src.Price))
+                .ForMember(dest => dest.Currency, opt => opt.MapFrom(src => src.Currency))
 
+                // ✅ Enum mappings - direct mapping
+                .ForMember(dest => dest.FuelType, opt => opt.MapFrom(src => src.FuelType))
+                .ForMember(dest => dest.DamageType, opt => opt.MapFrom(src => src.DamageType))
+                .ForMember(dest => dest.Transmission, opt => opt.MapFrom(src => src.Transmission))
+                .ForMember(dest => dest.DriveTrain, opt => opt.MapFrom(src => src.DriveTrain))
+                .ForMember(dest => dest.CarCondition, opt => opt.MapFrom(src => src.CarCondition))
+                .ForMember(dest => dest.TitleType, opt => opt.MapFrom(src => src.TitleType))
+                .ForMember(dest => dest.SecondaryDamage, opt => opt.MapFrom(src => src.SecondaryDamage))
+                .ForMember(dest => dest.HasKeys, opt => opt.MapFrom(src => src.HasKeys))
+                .ForMember(dest => dest.TitleState, opt => opt.MapFrom(src => src.TitleState))
+                .ForMember(dest => dest.EstimatedRetailValue, opt => opt.MapFrom(src => src.EstimatedRetailValue))
+
+                // Media processing
+                .ForMember(dest => dest.ImagePath, opt => opt.MapFrom(src =>
+                    !string.IsNullOrEmpty(src.PhotoUrls)
+                        ? src.PhotoUrls.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
+                        : null))
+                .ForMember(dest => dest.ThumbnailUrl, opt => opt.MapFrom(src =>
+                    !string.IsNullOrEmpty(src.PhotoUrls)
+                        ? src.PhotoUrls.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).FirstOrDefault()
+                        : null))
+                .ForMember(dest => dest.Images, opt => opt.MapFrom(src =>
+                    !string.IsNullOrEmpty(src.PhotoUrls)
+                        ? src.PhotoUrls.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToArray()
+                        : Array.Empty<string>()))
+
+                // Owner & Location
+                .ForMember(dest => dest.OwnerId, opt => opt.MapFrom(src => src.OwnerId))
+                .ForMember(dest => dest.OwnerName, opt => opt.MapFrom(src => src.Owner != null ? (src.Owner.FirstName + " " + src.Owner.LastName).Trim() : null))
+                .ForMember(dest => dest.OwnerContact, opt => opt.MapFrom(src => src.Owner != null ? (src.Owner.PhoneNumber ?? src.Owner.Email) : null))
+                .ForMember(dest => dest.LocationId, opt => opt.MapFrom(src => src.LocationId))
+                .ForMember(dest => dest.LocationName, opt => opt.MapFrom(src => src.Location != null ? src.Location.Name : null))
+                .ForMember(dest => dest.LocationAddress, opt => opt.MapFrom(src => src.Location != null ? src.Location.AddressLine1 : null))
+
+                // Status
+                .ForMember(dest => dest.Status, opt => opt.MapFrom(src => "Available")) // Default status
+                .ForMember(dest => dest.IsAvailableForAuction, opt => opt.MapFrom(src => true)) // Default availability
+
+                // Dates
+                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(src => src.CreatedAt))
+                .ForMember(dest => dest.UpdatedAtUtc, opt => opt.MapFrom(src => src.UpdatedAtUtc))
+
+                // Auction fields - default null for now
+                .ForMember(dest => dest.LotNumber, opt => opt.MapFrom(src => (int?)null))
+                .ForMember(dest => dest.ReservePrice, opt => opt.MapFrom(src => (decimal?)null))
+                .ForMember(dest => dest.StartPrice, opt => opt.MapFrom(src => (decimal?)null));
+
+            // ========== CarDetailDto Mapping ==========
             CreateMap<Car, CarDetailDto>()
-    .ForMember(dest => dest.PhotoUrls, opt => opt.MapFrom(src => src.PhotoUrls))
-    .ForMember(dest => dest.Images, opt => opt.MapFrom(src =>
-        !string.IsNullOrEmpty(src.PhotoUrls)
-            ? src.PhotoUrls.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToArray()
-            : Array.Empty<string>()))
-    .ForMember(dest => dest.VideoUrls, opt => opt.MapFrom(src => src.VideoUrls))
-    .ForMember(dest => dest.Videos, opt => opt.MapFrom(src =>
-        !string.IsNullOrEmpty(src.VideoUrls)
-            ? src.VideoUrls.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(v => v.Trim()).ToArray()
-            : Array.Empty<string>()))
-    .ForMember(dest => dest.OwnerName, opt => opt.MapFrom(src => src.Owner != null ? (src.Owner.FirstName + " " + src.Owner.LastName).Trim() : null))
-    .ForMember(dest => dest.OwnerContact, opt => opt.MapFrom(src => src.Owner != null ? (src.Owner.PhoneNumber ?? src.Owner.Email) : null))
-    .ForMember(dest => dest.LocationName, opt => opt.MapFrom(src => src.Location != null ? src.Location.Name : null));
-    
+                // Basic properties
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Vin, opt => opt.MapFrom(src => src.Vin))
+                .ForMember(dest => dest.Year, opt => opt.MapFrom(src => src.Year))
+                .ForMember(dest => dest.Make, opt => opt.MapFrom(src => src.Make))
+                .ForMember(dest => dest.Model, opt => opt.MapFrom(src => src.Model))
+                .ForMember(dest => dest.BodyStyle, opt => opt.MapFrom(src => src.BodyStyle))
+                .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color))
 
+                // ✅ Direct mapping - same field names
+                .ForMember(dest => dest.Mileage, opt => opt.MapFrom(src => src.Mileage))
+                .ForMember(dest => dest.MileageUnit, opt => opt.MapFrom(src => src.MileageUnit))
+                .ForMember(dest => dest.Price, opt => opt.MapFrom(src => src.Price))
+                .ForMember(dest => dest.Currency, opt => opt.MapFrom(src => src.Currency))
+
+                // ✅ Enum mappings - direct mapping
+                .ForMember(dest => dest.FuelType, opt => opt.MapFrom(src => src.FuelType))
+                .ForMember(dest => dest.DamageType, opt => opt.MapFrom(src => src.DamageType))
+                .ForMember(dest => dest.Transmission, opt => opt.MapFrom(src => src.Transmission))
+                .ForMember(dest => dest.DriveTrain, opt => opt.MapFrom(src => src.DriveTrain))
+                .ForMember(dest => dest.CarCondition, opt => opt.MapFrom(src => src.CarCondition))
+                .ForMember(dest => dest.TitleType, opt => opt.MapFrom(src => src.TitleType))
+                .ForMember(dest => dest.SecondaryDamage, opt => opt.MapFrom(src => src.SecondaryDamage))
+                .ForMember(dest => dest.HasKeys, opt => opt.MapFrom(src => src.HasKeys))
+                .ForMember(dest => dest.TitleState, opt => opt.MapFrom(src => src.TitleState))
+                .ForMember(dest => dest.EstimatedRetailValue, opt => opt.MapFrom(src => src.EstimatedRetailValue))
+
+                // Media - detailed
+                .ForMember(dest => dest.PhotoUrls, opt => opt.MapFrom(src => src.PhotoUrls))
+                .ForMember(dest => dest.Images, opt => opt.MapFrom(src =>
+                    !string.IsNullOrEmpty(src.PhotoUrls)
+                        ? src.PhotoUrls.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToArray()
+                        : Array.Empty<string>()))
+                .ForMember(dest => dest.VideoUrls, opt => opt.MapFrom(src => src.VideoUrls))
+                .ForMember(dest => dest.Videos, opt => opt.MapFrom(src =>
+                    !string.IsNullOrEmpty(src.VideoUrls)
+                        ? src.VideoUrls.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(v => v.Trim()).ToArray()
+                        : Array.Empty<string>()))
+
+                // Owner & Location
+                .ForMember(dest => dest.OwnerId, opt => opt.MapFrom(src => src.OwnerId))
+                .ForMember(dest => dest.OwnerName, opt => opt.MapFrom(src => src.Owner != null ? (src.Owner.FirstName + " " + src.Owner.LastName).Trim() : null))
+                .ForMember(dest => dest.OwnerContact, opt => opt.MapFrom(src => src.Owner != null ? (src.Owner.PhoneNumber ?? src.Owner.Email) : null))
+                .ForMember(dest => dest.LocationId, opt => opt.MapFrom(src => src.LocationId))
+                .ForMember(dest => dest.LocationName, opt => opt.MapFrom(src => src.Location != null ? src.Location.Name : null))
+                .ForMember(dest => dest.LocationAddress, opt => opt.MapFrom(src => src.Location != null ? src.Location.AddressLine1 : null))
+
+                // Dates
+                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(src => src.CreatedAt))
+                .ForMember(dest => dest.UpdatedAtUtc, opt => opt.MapFrom(src => src.UpdatedAtUtc))
+
+                // Auction fields - default null for now
+                .ForMember(dest => dest.LotNumber, opt => opt.MapFrom(src => (int?)null))
+                .ForMember(dest => dest.ReservePrice, opt => opt.MapFrom(src => (decimal?)null))
+                .ForMember(dest => dest.StartPrice, opt => opt.MapFrom(src => (decimal?)null));
+
+            // ========== CarCreateDto to Car Mapping - ✅ TAM DÜZƏLDILDI ==========
             CreateMap<CarCreateDto, Car>()
+                // Entity framework properties - ignore
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
+                .ForMember(dest => dest.UpdatedAtUtc, opt => opt.Ignore())
+                .ForMember(dest => dest.IsDeleted, opt => opt.Ignore())
+
+                // Navigation properties - ignore  
+                .ForMember(dest => dest.Owner, opt => opt.Ignore())
+                .ForMember(dest => dest.Location, opt => opt.Ignore())
+                .ForMember(dest => dest.Documents, opt => opt.Ignore())
+
+                // File properties - ignore (handled in service)
                 .ForMember(dest => dest.PhotoUrls, opt => opt.Ignore())
                 .ForMember(dest => dest.VideoUrls, opt => opt.Ignore())
-                .ForMember(dest => dest.PhotoUrls, opt => opt.Ignore())
+
+                // Owner - set in service
                 .ForMember(dest => dest.OwnerId, opt => opt.Ignore())
+
+                // ✅ Direct mappings - same field names
+                .ForMember(dest => dest.Vin, opt => opt.MapFrom(src => src.Vin))
+                .ForMember(dest => dest.Year, opt => opt.MapFrom(src => src.Year))
+                .ForMember(dest => dest.Make, opt => opt.MapFrom(src => src.Make))
+                .ForMember(dest => dest.Model, opt => opt.MapFrom(src => src.Model))
+                .ForMember(dest => dest.BodyStyle, opt => opt.MapFrom(src => src.BodyStyle))
+                .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color))
+                .ForMember(dest => dest.Price, opt => opt.MapFrom(src => src.Price))
+                .ForMember(dest => dest.Currency, opt => opt.MapFrom(src => src.Currency))
+                .ForMember(dest => dest.Mileage, opt => opt.MapFrom(src => src.Mileage))
+                .ForMember(dest => dest.MileageUnit, opt => opt.MapFrom(src => src.MileageUnit))
                 .ForMember(dest => dest.LocationId, opt => opt.MapFrom(src => src.LocationId))
+
+                // ✅ Enum mappings - same field names
+                .ForMember(dest => dest.FuelType, opt => opt.MapFrom(src => src.FuelType))
+                .ForMember(dest => dest.DamageType, opt => opt.MapFrom(src => src.DamageType))
+                .ForMember(dest => dest.Transmission, opt => opt.MapFrom(src => src.Transmission))
+                .ForMember(dest => dest.DriveTrain, opt => opt.MapFrom(src => src.DriveTrain))
+                .ForMember(dest => dest.CarCondition, opt => opt.MapFrom(src => src.CarCondition))
+                .ForMember(dest => dest.TitleType, opt => opt.MapFrom(src => src.TitleType))
+                .ForMember(dest => dest.SecondaryDamage, opt => opt.MapFrom(src => src.SecondaryDamage))
+                .ForMember(dest => dest.HasKeys, opt => opt.MapFrom(src => src.HasKeys))
+                .ForMember(dest => dest.TitleState, opt => opt.MapFrom(src => src.TitleState))
+                .ForMember(dest => dest.EstimatedRetailValue, opt => opt.MapFrom(src => src.EstimatedRetailValue))
                 .ReverseMap()
                 .ForMember(src => src.Image, opt => opt.Ignore())
-                .ForMember(src => src.ImagePath, opt => opt.Ignore());
+                .ForMember(src => src.ImagePath, opt => opt.Ignore())
+                .ForMember(src => src.Video, opt => opt.Ignore())
+                .ForMember(src => src.VideoPath, opt => opt.Ignore())
+                .ForMember(src => src.OwnerId, opt => opt.Ignore());
 
+            // ========== CarUpdateDto Mapping ==========
             CreateMap<CarUpdateDto, Car>()
                 .ForMember(dest => dest.PhotoUrls, opt => opt.Ignore())
                 .ForMember(dest => dest.VideoUrls, opt => opt.Ignore())
-                .ForMember(dest => dest.PhotoUrls, opt => opt.Ignore())
                 .ForMember(dest => dest.OwnerId, opt => opt.Ignore())
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
+                .ForMember(dest => dest.UpdatedAtUtc, opt => opt.Ignore())
+                .ForMember(dest => dest.IsDeleted, opt => opt.Ignore())
+                .ForMember(dest => dest.Owner, opt => opt.Ignore())
+                .ForMember(dest => dest.Location, opt => opt.Ignore())
+                .ForMember(dest => dest.Documents, opt => opt.Ignore())
                 .ReverseMap()
                 .ForMember(src => src.ImageCar, opt => opt.Ignore());
-
             #endregion
             #region Location
-            CreateMap<Location, LocationGetDto>().ReverseMap();
-            CreateMap<Location, LocationDetailDto>().ReverseMap();
-            CreateMap<LocationCreateDto, Location>().ReverseMap();
-            CreateMap<LocationUpdateDto, Location>().ReverseMap();
+
+            // Location entity-dən LocationGetDto-ya (Siyahı üçün)
+            CreateMap<Location, LocationGetDto>();
+
+            // Location entity-dən LocationDetailDto-ya (Detallı görünüş üçün)
+            CreateMap<Location, LocationDetailDto>();
+
+            // LocationCreateDto-dan Location entity-sinə (Yeni Location yaratmaq üçün)
+            CreateMap<LocationCreateDto, Location>();
+
+            // LocationUpdateDto-dan Location entity-sinə (Mövcud Location-u yeniləmək üçün)
+            CreateMap<LocationUpdateDto, Location>();
+
             #endregion
             #endregion
 
@@ -314,8 +446,6 @@ namespace AutoriaFinal.Application.Profiles
                 .ReverseMap();
 
             #endregion
-
-
         }
     }
 }

@@ -1,8 +1,10 @@
 ﻿
 using AutoriaFinal.Application.Services;
+using AutoriaFinal.Application.Services.Admin;
 using AutoriaFinal.Application.Services.Auctions;
 using AutoriaFinal.Application.Services.Identity;
 using AutoriaFinal.Contract.Services;
+using AutoriaFinal.Contract.Services.Admin;
 using AutoriaFinal.Contract.Services.Auctions;
 using AutoriaFinal.Contract.Services.Identity;
 using AutoriaFinal.Infrastructure.Services;
@@ -30,6 +32,7 @@ namespace AutoriaFinal.Application.Extensions
             services.AddScoped<ILocationService, LocationService>();
             #endregion
             services.AddScoped<IAuthService, AuthService>();
+            services.AddScoped<IAdminService, AdminService>();
             return services;
         }
     }

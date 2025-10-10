@@ -145,29 +145,156 @@ export const colorOptions = [
   { name: 'Purple', hex: '#800080', textColor: '#FFFFFF' }
 ];
 
-// Fuel type options
+// FuelType options - matching backend FuelType.cs enum values (EXACT VALUES)
 export const fuelTypeOptions = [
-  { value: 'Petrol', label: 'Petrol' },
-  { value: 'Diesel', label: 'Diesel' },
-  { value: 'Hybrid', label: 'Hybrid' },
-  { value: 'Electric', label: 'Electric' },
-  { value: 'LPG', label: 'LPG' },
-  { value: 'CNG', label: 'CNG' },
-  { value: 'Biofuel', label: 'Biofuel' }
+  { value: 0, label: 'Naməlum' }, // Unknown = 0
+  { value: 1, label: 'Benzin' }, // Gasoline = 1
+  { value: 2, label: 'Dizel' }, // Diesel = 2
+  { value: 3, label: 'Hibrid' }, // Hybrid = 3
+  { value: 4, label: 'Elektrik' }, // Electric = 4
+  { value: 5, label: 'LPG' }, // LPG = 5
+  { value: 6, label: 'CNG' }, // CNG = 6
+  { value: 7, label: 'Digər' } // Other = 7
 ];
 
-// Damage type options
+// DamageType options - matching backend DamageType.cs enum values (EXACT VALUES)
 export const damageTypeOptions = [
-  { value: 'None', label: 'No Damage' },
-  { value: 'Minor', label: 'Minor Damage' },
-  { value: 'Moderate', label: 'Moderate Damage' },
-  { value: 'Major', label: 'Major Damage' },
-  { value: 'Severe', label: 'Severe Damage' },
-  { value: 'Salvage', label: 'Salvage Title' },
-  { value: 'Flood', label: 'Flood Damage' },
-  { value: 'Fire', label: 'Fire Damage' },
-  { value: 'Hail', label: 'Hail Damage' },
-  { value: 'Accident', label: 'Accident Damage' }
+  { value: 0, label: 'Naməlum' }, // Unknown = 0
+  { value: 1, label: 'Ön Hissə' }, // FrontEnd = 1
+  { value: 2, label: 'Arxa Hissə' }, // RearEnd = 2
+  { value: 3, label: 'Yan Tərəf' }, // Side = 3
+  { value: 4, label: 'Kiçik Batıq/Cızıqlar' }, // MinorDentsScratches = 4
+  { value: 5, label: 'Normal Aşınma' }, // NormalWear = 5
+  { value: 6, label: 'Hər Tərəfli' }, // AllOver = 6
+  { value: 7, label: 'Dolu' }, // Hail = 7
+  { value: 8, label: 'Vandalizm' }, // Vandalism = 8
+  { value: 9, label: 'Su/Sel' }, // WaterFlood = 9
+  { value: 10, label: 'Yanma' }, // Burn = 10
+  { value: 11, label: 'Mexaniki' }, // Mechanical = 11
+  { value: 12, label: 'Dam' }, // Roof = 12
+  { value: 13, label: 'Alt Hissə' } // Undercarriage = 13
+];
+
+// SecondaryDamage options - matching backend DamageType.cs enum values (EXACT VALUES)
+export const secondaryDamageOptions = [
+  { value: 0, label: 'Yoxdur' }, // None = 0
+  { value: 1, label: 'Ön Hissə' }, // FrontEnd = 1
+  { value: 2, label: 'Arxa Hissə' }, // RearEnd = 2
+  { value: 3, label: 'Yan Tərəf' }, // Side = 3
+  { value: 4, label: 'Kiçik Batıq/Cızıqlar' }, // MinorDentsScratches = 4
+  { value: 5, label: 'Normal Aşınma' }, // NormalWear = 5
+  { value: 6, label: 'Hər Tərəfli' }, // AllOver = 6
+  { value: 7, label: 'Dolu' }, // Hail = 7
+  { value: 8, label: 'Vandalizm' }, // Vandalism = 8
+  { value: 9, label: 'Su/Sel' }, // WaterFlood = 9
+  { value: 10, label: 'Yanma' }, // Burn = 10
+  { value: 11, label: 'Mexaniki' }, // Mechanical = 11
+  { value: 12, label: 'Dam' }, // Roof = 12
+  { value: 13, label: 'Alt Hissə' } // Undercarriage = 13
+];
+
+// CarCondition options - matching backend CarCondition.cs enum values (EXACT VALUES)
+export const carConditionOptions = [
+  { value: 0, label: 'Naməlum' }, // Unknown = 0
+  { value: 1, label: 'İşləyir və Sürülür' }, // RunAndDrive = 1
+  { value: 2, label: 'Mühərrik Başlatma Proqramı' }, // EngineStartProgram = 2
+  { value: 3, label: 'Təkmilləşdirilmiş' }, // Enhanced = 3
+  { value: 4, label: 'Stasionar' } // Stationary = 4
+];
+
+// Transmission options - matching backend Transmission.cs enum values (EXACT VALUES)
+export const transmissionOptions = [
+  { value: 0, label: 'Naməlum' }, // Unknown = 0
+  { value: 1, label: 'Avtomatik' }, // Automatic = 1
+  { value: 2, label: 'Mexaniki' }, // Manual = 2
+  { value: 3, label: 'CVT' } // CVT = 3
+];
+
+// DriveTrain options - matching backend DriveTrain.cs enum values (EXACT VALUES)
+export const driveTrainOptions = [
+  { value: 0, label: 'Naməlum' }, // Unknown = 0
+  { value: 1, label: 'Ön Təkər' }, // FWD = 1
+  { value: 2, label: 'Arxa Təkər' }, // RWD = 2
+  { value: 3, label: 'Tam Ötürücü' }, // AWD = 3
+  { value: 4, label: 'Dörd Təkər' } // FourWD = 4
+];
+
+// TitleType options - matching backend TitleType.cs enum values (EXACT VALUES)
+export const titleTypeOptions = [
+  { value: 0, label: 'Naməlum' }, // Unknown = 0
+  { value: 1, label: 'Təmiz' }, // Clean = 1
+  { value: 2, label: 'Salvage' }, // Salvage = 2
+  { value: 3, label: 'Təmir Edilməz' }, // NonRepairable = 3
+  { value: 4, label: 'Məhv Sertifikatı' }, // CertificateOfDestruction = 4
+  { value: 5, label: 'Yenidən Qurulmuş' }, // Rebuilt = 5
+  { value: 6, label: 'Zibil' } // Junk = 6
+];
+
+// TitleState options - US States and territories
+export const titleStateOptions = [
+  { value: '', label: 'Seçin' },
+  { value: 'AL', label: 'Alabama' },
+  { value: 'AK', label: 'Alaska' },
+  { value: 'AZ', label: 'Arizona' },
+  { value: 'AR', label: 'Arkansas' },
+  { value: 'CA', label: 'California' },
+  { value: 'CO', label: 'Colorado' },
+  { value: 'CT', label: 'Connecticut' },
+  { value: 'DE', label: 'Delaware' },
+  { value: 'FL', label: 'Florida' },
+  { value: 'GA', label: 'Georgia' },
+  { value: 'HI', label: 'Hawaii' },
+  { value: 'ID', label: 'Idaho' },
+  { value: 'IL', label: 'Illinois' },
+  { value: 'IN', label: 'Indiana' },
+  { value: 'IA', label: 'Iowa' },
+  { value: 'KS', label: 'Kansas' },
+  { value: 'KY', label: 'Kentucky' },
+  { value: 'LA', label: 'Louisiana' },
+  { value: 'ME', label: 'Maine' },
+  { value: 'MD', label: 'Maryland' },
+  { value: 'MA', label: 'Massachusetts' },
+  { value: 'MI', label: 'Michigan' },
+  { value: 'MN', label: 'Minnesota' },
+  { value: 'MS', label: 'Mississippi' },
+  { value: 'MO', label: 'Missouri' },
+  { value: 'MT', label: 'Montana' },
+  { value: 'NE', label: 'Nebraska' },
+  { value: 'NV', label: 'Nevada' },
+  { value: 'NH', label: 'New Hampshire' },
+  { value: 'NJ', label: 'New Jersey' },
+  { value: 'NM', label: 'New Mexico' },
+  { value: 'NY', label: 'New York' },
+  { value: 'NC', label: 'North Carolina' },
+  { value: 'ND', label: 'North Dakota' },
+  { value: 'OH', label: 'Ohio' },
+  { value: 'OK', label: 'Oklahoma' },
+  { value: 'OR', label: 'Oregon' },
+  { value: 'PA', label: 'Pennsylvania' },
+  { value: 'RI', label: 'Rhode Island' },
+  { value: 'SC', label: 'South Carolina' },
+  { value: 'SD', label: 'South Dakota' },
+  { value: 'TN', label: 'Tennessee' },
+  { value: 'TX', label: 'Texas' },
+  { value: 'UT', label: 'Utah' },
+  { value: 'VT', label: 'Vermont' },
+  { value: 'VA', label: 'Virginia' },
+  { value: 'WA', label: 'Washington' },
+  { value: 'WV', label: 'West Virginia' },
+  { value: 'WI', label: 'Wisconsin' },
+  { value: 'WY', label: 'Wyoming' },
+  { value: 'DC', label: 'District of Columbia' },
+  { value: 'PR', label: 'Puerto Rico' },
+  { value: 'VI', label: 'Virgin Islands' },
+  { value: 'GU', label: 'Guam' },
+  { value: 'AS', label: 'American Samoa' },
+  { value: 'MP', label: 'Northern Mariana Islands' }
+];
+
+// HasKeys options - boolean representation
+export const hasKeysOptions = [
+  { value: true, label: 'Bəli' },
+  { value: false, label: 'Xeyr' }
 ];
 
 // Body style options

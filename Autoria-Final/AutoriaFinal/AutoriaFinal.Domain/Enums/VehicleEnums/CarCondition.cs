@@ -8,10 +8,10 @@ namespace AutoriaFinal.Domain.Enums.VehicleEnums
 {
     public enum CarCondition
     {
-        Unknown,
-        RunAndDrive,
-        EngineStartProgram,
-        Enhanced,
-        Stationary
+        Unknown = 0,
+        RunAndDrive = 1,
+        EngineStartProgram = 2,
+        Enhanced = 3,
+        Stationary = 4
     }
 }

@@ -2,41 +2,38 @@ import { useState } from 'react'
 import { Settings, Bug, RefreshCw, Download } from 'lucide-react'
 import { Button } from '../components/common/Button'
 import { AuctionList } from '../components/AuctionList'
-import { AuctionForm } from '../components/AuctionForm'
 import { AuctionDetailModal } from '../components/AuctionDetailModal'
+import { NewAuctionModal } from '../components/NewAuctionModal'
+import { EditAuctionModal } from '../components/EditAuctionModal'
 import { ConfigModal } from '../components/ConfigModal'
 import { DebugPanel } from '../components/DebugPanel'
 import { useToast } from '../components/common/Toast'
 
 export function AuctionsListPage() {
-  const [selectedAuctionId, setSelectedAuctionId] = useState<string | null>(null)
   const [showConfigModal, setShowConfigModal] = useState(false)
   const [showDebugPanel, setShowDebugPanel] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
+  const [showNewAuctionModal, setShowNewAuctionModal] = useState(false)
+  const [showEditAuctionModal, setShowEditAuctionModal] = useState(false)
   const [detailAuctionId, setDetailAuctionId] = useState<string | null>(null)
+  const [editAuctionId, setEditAuctionId] = useState<string | null>(null)
   const { success, error, info } = useToast()
-
-  const handleAuctionSelect = (auctionId: string) => {
-    if (auctionId === '') {
-      // Create new auction mode
-      setSelectedAuctionId(null)
-    } else {
-      setSelectedAuctionId(auctionId)
-    }
-  }
 
   const handleViewDetails = (auctionId: string) => {
     setDetailAuctionId(auctionId)
     setShowDetailModal(true)
   }
 
-  const handleAuctionSaved = () => {
-    // Refresh the auction list
-    // This will be handled by the AuctionList component
+  const handleEditAuction = (auctionId: string) => {
+    setEditAuctionId(auctionId)
+    setShowEditAuctionModal(true)
   }
 
-  const handleAuctionDeleted = () => {
-    setSelectedAuctionId(null)
+  const handleNewAuction = () => {
+    setShowNewAuctionModal(true)
+  }
+
+  const handleAuctionSaved = () => {
     // Refresh the auction list
     // This will be handled by the AuctionList component
   }
@@ -51,66 +48,60 @@ export function AuctionsListPage() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-gray-50 dark:bg-dark-bg-primary">
       {/* Top Action Bar */}
-      <div className="flex items-center justify-between p-6 border-b border-dark-border bg-dark-bg-secondary">
-        <div className="flex items-center space-x-4">
-          <h1 className="text-h1 font-heading text-dark-text-primary">Auctions</h1>
-          <p className="text-body-md text-dark-text-secondary">Manage your auction lifecycle</p>
-        </div>
-        
-        <div className="flex items-center space-x-3">
-          <Button 
-            variant="secondary" 
-            icon={Settings} 
-            onClick={() => setShowConfigModal(true)}
-          >
-            Config
-          </Button>
-          <Button 
-            variant="secondary" 
-            icon={Bug} 
-            onClick={() => setShowDebugPanel(true)}
-          >
-            Debug
-          </Button>
-          <Button 
-            variant="secondary" 
-            icon={RefreshCw} 
-            onClick={handleRefresh}
-          >
-            Refresh
-          </Button>
-          <Button 
-            variant="secondary" 
-            icon={Download} 
-            onClick={handleExport}
-          >
-            Export
-          </Button>
+      <div className="bg-white dark:bg-dark-bg-secondary border-b border-gray-200 dark:border-dark-border">
+        <div className="flex items-center justify-between p-6">
+          <div className="flex items-center space-x-4">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-dark-text-primary">Auction Management</h1>
+            <p className="text-sm text-gray-600 dark:text-dark-text-secondary">Complete auction lifecycle management</p>
+          </div>
+          
+          <div className="flex items-center space-x-3">
+            <Button 
+              variant="secondary" 
+              icon={Settings} 
+              onClick={() => setShowConfigModal(true)}
+              className="text-gray-600 hover:text-gray-900 dark:text-dark-text-muted dark:hover:text-dark-text-primary"
+            >
+              Config
+            </Button>
+            <Button 
+              variant="secondary" 
+              icon={Bug} 
+              onClick={() => setShowDebugPanel(true)}
+              className="text-gray-600 hover:text-gray-900 dark:text-dark-text-muted dark:hover:text-dark-text-primary"
+            >
+              Debug
+            </Button>
+            <Button 
+              variant="secondary" 
+              icon={RefreshCw} 
+              onClick={handleRefresh}
+              className="text-gray-600 hover:text-gray-900 dark:text-dark-text-muted dark:hover:text-dark-text-primary"
+            >
+              Refresh
+            </Button>
+            <Button 
+              variant="secondary" 
+              icon={Download} 
+              onClick={handleExport}
+              className="text-gray-600 hover:text-gray-900 dark:text-dark-text-muted dark:hover:text-dark-text-primary"
+            >
+              Export
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Main Content - Two Panel Layout */}
-      <div className="flex-1 grid grid-cols-10 gap-0 min-h-0">
-        {/* Left Panel - Auction List (70%) */}
-        <div className="col-span-7 bg-dark-bg-primary border-r border-dark-border">
-          <AuctionList
-            selectedAuctionId={selectedAuctionId}
-            onAuctionSelect={handleAuctionSelect}
-            onViewDetails={handleViewDetails}
-            onRefresh={handleRefresh}
-          />
-      </div>
-
-        {/* Right Panel - Auction Form (30%) */}
-        <div className="col-span-3 bg-dark-bg-secondary">
-          <AuctionForm
-            selectedAuctionId={selectedAuctionId}
-            onAuctionSaved={handleAuctionSaved}
-            onAuctionDeleted={handleAuctionDeleted}
-          />
-        </div>
+      {/* Main Content - Single Column Layout */}
+      <div className="flex-1 min-h-0">
+        <AuctionList
+          onViewDetails={handleViewDetails}
+          onEditAuction={handleEditAuction}
+          onNewAuction={handleNewAuction}
+          onRefresh={handleRefresh}
+        />
       </div>
 
       {/* Modals */}
@@ -127,12 +118,31 @@ export function AuctionsListPage() {
       )}
 
       {showDetailModal && detailAuctionId && (
-      <AuctionDetailModal
+        <AuctionDetailModal
           auctionId={detailAuctionId}
-        onClose={() => {
-          setShowDetailModal(false)
+          onClose={() => {
+            setShowDetailModal(false)
             setDetailAuctionId(null)
           }}
+        />
+      )}
+
+      {showNewAuctionModal && (
+        <NewAuctionModal
+          onClose={() => setShowNewAuctionModal(false)}
+          onSuccess={handleAuctionSaved}
+        />
+      )}
+
+      {showEditAuctionModal && editAuctionId && (
+        <EditAuctionModal
+          isOpen={showEditAuctionModal}
+          onClose={() => {
+            setShowEditAuctionModal(false)
+            setEditAuctionId(null)
+          }}
+          auctionId={editAuctionId}
+          onSuccess={handleAuctionSaved}
         />
       )}
     </div>

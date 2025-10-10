@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { apiClient } from '../lib/api';
@@ -22,19 +22,144 @@ import {
   ChevronLeft,
   Sparkles,
   Star,
-  ChevronDown
+  ChevronDown,
+  Settings,
+  Cog,
+  FileText,
+  Shield
 } from 'lucide-react';
 import { Combobox } from '@headlessui/react';
 import { 
   colorOptions, 
-  fuelTypeOptions, 
-  damageTypeOptions, 
   bodyStyleOptions, 
   currencyOptions, 
-  mileageUnitOptions
+  mileageUnitOptions,
+  fuelTypeOptions,
+  damageTypeOptions,
+  secondaryDamageOptions,
+  carConditionOptions,
+  transmissionOptions,
+  driveTrainOptions,
+  titleTypeOptions,
+  titleStateOptions,
+  hasKeysOptions
 } from '../data/carBrands';
 import { carMakes, popularBrands, CarMake } from '../constants/carMakes';
+import { getEnumLabel } from '../services/enumService';
 import * as SiIcons from 'react-icons/si';
+
+// Comprehensive TypeScript Interfaces
+interface VehicleFormData {
+  // Basic Information
+  make: string;
+  model: string;
+  year: number;
+  vin: string;
+  color: string;
+  bodyStyle: string;
+  
+  // Enum Fields (numeric values matching backend)
+  fuelType: number;
+  damageType: number;
+  secondaryDamage: number;
+  transmission: number;
+  driveTrain: number;
+  carCondition: number;
+  titleType: number;
+  
+  // Additional Fields
+  mileage: number;
+  mileageUnit: string;
+  price: number;
+  currency: string;
+  locationId: string;
+  hasKeys: boolean;
+  titleState: string;
+  estimatedRetailValue: number;
+}
+
+interface LocationOption {
+  id: string;
+  name: string;
+}
+
+interface ValidationErrors {
+  [key: string]: string;
+}
+
+
+// Step Component Interfaces
+interface Step1Props {
+  selectedBrand: CarMake | null;
+  brandQueryRef: React.RefObject<HTMLInputElement>;
+  handleBrandSelect: (brand: CarMake | null) => void;
+  goToStep: (step: number) => void;
+}
+
+interface Step2Props {
+  errors: Record<string, string>;
+  selectedBrand: CarMake | null;
+  selectedYear: number | null;
+  modelInputValue: string;
+  showModelDropdown: boolean;
+  filteredModels: string[];
+  modelSearchTermRef: React.RefObject<HTMLInputElement>;
+  yearRef: React.RefObject<HTMLSelectElement>;
+  handleModelSelect: (model: string) => void;
+  handleModelInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleModelInputFocus: () => void;
+  handleModelInputBlur: () => void;
+  handleYearSelect: (year: number) => void;
+}
+
+interface Step3Props {
+  formData: VehicleFormData;
+  errors: ValidationErrors;
+  selectedColor: string;
+  locationOptions: LocationOption[];
+  vinRef: React.RefObject<HTMLInputElement>;
+  bodyStyleRef: React.RefObject<HTMLSelectElement>;
+  fuelTypeRef: React.RefObject<HTMLSelectElement>;
+  damageTypeRef: React.RefObject<HTMLSelectElement>;
+  secondaryDamageRef: React.RefObject<HTMLSelectElement>;
+  transmissionRef: React.RefObject<HTMLSelectElement>;
+  driveTrainRef: React.RefObject<HTMLSelectElement>;
+  carConditionRef: React.RefObject<HTMLSelectElement>;
+  titleTypeRef: React.RefObject<HTMLSelectElement>;
+  mileageRef: React.RefObject<HTMLInputElement>;
+  mileageUnitRef: React.RefObject<HTMLSelectElement>;
+  priceRef: React.RefObject<HTMLInputElement>;
+  currencyRef: React.RefObject<HTMLSelectElement>;
+  locationIdRef: React.RefObject<HTMLSelectElement>;
+  hasKeysRef: React.RefObject<HTMLSelectElement>;
+  titleStateRef: React.RefObject<HTMLSelectElement>;
+  estimatedRetailValueRef: React.RefObject<HTMLInputElement>;
+  handleInputChange: (field: keyof VehicleFormData, value: string | number | boolean) => void;
+  handleColorSelect: (color: string) => void;
+}
+
+interface Step4Props {
+  images: File[];
+  imagePreviews: string[];
+  videoPreview: string | null;
+  dragOver: boolean;
+  errors: Record<string, string>;
+  handleFileInputChange: (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => void;
+  handleDragOver: (e: React.DragEvent) => void;
+  handleDragLeave: (e: React.DragEvent) => void;
+  handleDrop: (e: React.DragEvent, type: 'image' | 'video') => void;
+  removeFile: (type: 'image' | 'video', index?: number) => void;
+}
+
+interface Step5Props {
+  formData: VehicleFormData;
+  selectedBrand: CarMake | null;
+  selectedColor: string;
+  locationOptions: LocationOption[];
+  images: File[];
+  errors: ValidationErrors;
+  loading: boolean;
+}
 
 const BrandIcon = ({ iconName, ...props }: { iconName: string } & React.SVGProps<SVGSVGElement>) => {
   const IconComponent = (SiIcons as any)[`Si${iconName}`];
@@ -47,643 +172,166 @@ const BrandIcon = ({ iconName, ...props }: { iconName: string } & React.SVGProps
   return <Car {...props} />;
 };
 
-interface CarFormData {
-  make: string;
-  model: string;
-  year: number;
-  mileage: number;
-  mileageUnit: string;
-  vin: string;
-  color: string;
-  fuelType: string;
-  damageType: string;
-  price: number;
-  currency: string;
-  bodyStyle: string;
-  locationId: string;
-  images: File[];
-  video?: File;
-}
-
-interface LocationOption {
-  id: string;
-  name: string;
-}
-
-const AddVehicle: React.FC = () => {
-  const { user, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
-  
-  // Wizard state
-  const [currentStep, setCurrentStep] = useState(1);
-  const [selectedBrand, setSelectedBrand] = useState<CarMake | null>(null);
-  const [filteredModels, setFilteredModels] = useState<string[]>([]);
-  const [modelSearchTerm, setModelSearchTerm] = useState('');
-  
-  // Brand selection state
-  const [brandQuery, setBrandQuery] = useState('');
-  
-  const [formData, setFormData] = useState<CarFormData>({
-    make: '',
-    model: '',
-    year: new Date().getFullYear(),
-    mileage: 0,
-    mileageUnit: 'km',
-    vin: '',
-    color: '',
-    fuelType: '',
-    damageType: '',
-    price: 0,
-    currency: 'AZN',
-    bodyStyle: '',
-    locationId: '',
-    images: []
-  });
-
-  const [locationOptions, setLocationOptions] = useState<LocationOption[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [dragOver, setDragOver] = useState(false);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [videoPreview, setVideoPreview] = useState<string | null>(null);
-  const [showSuccess, setShowSuccess] = useState(false);
-
-  // Role-based access control
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
-
-    const roles = user?.user?.roles;
-    const isSeller = roles && roles.includes('Seller');
-    
-    if (!isSeller) {
-      navigate('/dashboard');
-      return;
-    }
-  }, [isAuthenticated, user, navigate]);
-
-  // Load locations data
-  useEffect(() => {
-    loadLocations();
-  }, []);
-
-  // Filter models based on search term
-  useEffect(() => {
-    if (selectedBrand) {
-      const filtered = selectedBrand.models.filter(model =>
-        model.toLowerCase().includes(modelSearchTerm.toLowerCase())
-      );
-      setFilteredModels(filtered);
-    }
-  }, [selectedBrand, modelSearchTerm]);
-
-  const loadLocations = async () => {
-    try {
-      const rawLocations = await apiClient.getLocations();
-      let processedLocations: {id: string, name: string}[] = [];
-      
-      if (Array.isArray(rawLocations) && rawLocations.length > 0) {
-        const hasIdAndName = rawLocations.every(item => 
-          typeof item === 'object' && 
-          item !== null && 
-          typeof item.id === 'string' && 
-          (typeof item.name === 'string' || typeof item.city === 'string')
-        );
-        
-        if (hasIdAndName) {
-          processedLocations = rawLocations.map(loc => ({
-            id: loc.id,
-            name: loc.name || loc.city || 'Unknown Location'
-          }));
-        } else if (rawLocations.every(item => typeof item === 'string')) {
-          processedLocations = rawLocations.map((name, index) => ({
-            id: `mock-location-${index}-${Date.now()}`,
-            name: name
-          }));
-        }
-      }
-      
-      setLocationOptions(processedLocations);
-    } catch (error) {
-      console.error('Error loading locations:', error);
-      const fallbackLocations = [
-        { id: 'fallback-1', name: 'Baku' },
-        { id: 'fallback-2', name: 'Ganja' },
-        { id: 'fallback-3', name: 'Sumgayit' },
-        { id: 'fallback-4', name: 'Mingachevir' },
-        { id: 'fallback-5', name: 'Lankaran' }
-      ];
-      setLocationOptions(fallbackLocations);
-    }
-  };
-
-  // Wizard navigation functions
-  const nextStep = () => {
-    if (currentStep < 5) {
-      setCurrentStep(prev => prev + 1);
-    }
-  };
-
-  const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(prev => prev - 1);
-    }
-  };
-
-  const goToStep = (step: number) => {
-    if (step >= 1 && step <= 5) {
-      setCurrentStep(step);
-    }
-  };
-
-  // Step 1: Brand selection
-  const handleBrandSelect = (brand: CarMake | null) => {
-    if (!brand) return;
-    setSelectedBrand(brand);
-    setFormData(prev => ({ ...prev, make: brand.name, model: '' }));
-    setBrandQuery(brand.name);
-    setModelSearchTerm('');
-    setFilteredModels(brand.models);
-    nextStep();
-  };
-
-  // Step 2: Model and year selection
-  const handleModelSelect = (model: string) => {
-    setFormData(prev => ({ ...prev, model }));
-    setModelSearchTerm(model);
-  };
-
-  const handleYearSelect = (year: number) => {
-    setFormData(prev => ({ ...prev, year }));
-  };
-
-  // Step 3: Technical specifications
-  const handleInputChange = (field: keyof CarFormData, value: string | number) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
-  };
-
-  const handleColorSelect = (color: string) => {
-    setFormData(prev => ({ ...prev, color }));
-  };
-
-  // Step 4: File upload functions
-  const handleFileUpload = (file: File, type: 'image' | 'video') => {
-    if (type === 'image') {
-      if (formData.images.length >= 15) {
-        setErrors(prev => ({ 
-          ...prev, 
-          submit: 'Maximum 15 images allowed' 
-        }));
-        return;
-      }
-
-      setFormData(prev => ({ ...prev, images: [...prev.images, file] }));
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        setImagePreviews(prev => [...prev, result]);
-      };
-      reader.readAsDataURL(file);
-    } else {
-      setFormData(prev => ({ ...prev, video: file }));
-      const reader = new FileReader();
-      reader.onload = (e) => setVideoPreview(e.target?.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
-    const files = Array.from(e.target.files || []);
-    
-    if (type === 'image') {
-      if (formData.images.length + files.length > 15) {
-        setErrors(prev => ({ 
-          ...prev, 
-          submit: `Maximum 15 images allowed. You can add ${15 - formData.images.length} more images.` 
-        }));
-        return;
-      }
-
-      for (const file of files) {
-        if (!file.type.startsWith('image/')) {
-          setErrors(prev => ({ 
-            ...prev, 
-            submit: 'Please select valid image files' 
-          }));
-          return;
-        }
-
-        const maxSize = 10 * 1024 * 1024;
-        if (file.size > maxSize) {
-          setErrors(prev => ({ 
-            ...prev, 
-            submit: `File size too large. Maximum 10MB allowed for images` 
-          }));
-          return;
-        }
-
-        handleFileUpload(file, type);
-      }
-    } else {
-      const file = files[0];
-      if (file) {
-        if (!file.type.startsWith('video/')) {
-          setErrors(prev => ({ 
-            ...prev, 
-            submit: 'Please select a valid video file' 
-          }));
-          return;
-        }
-
-        const maxSize = 50 * 1024 * 1024;
-        if (file.size > maxSize) {
-          setErrors(prev => ({ 
-            ...prev, 
-            submit: `File size too large. Maximum 50MB allowed for videos` 
-          }));
-          return;
-        }
-
-        handleFileUpload(file, type);
-      }
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-  };
-
-  const handleDrop = (e: React.DragEvent, type: 'image' | 'video') => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-    
-    const files = Array.from(e.dataTransfer.files);
-    const file = files[0];
-    
-    if (file) {
-      if (type === 'image' && file.type.startsWith('image/')) {
-        handleFileUpload(file, 'image');
-      } else if (type === 'video' && file.type.startsWith('video/')) {
-        handleFileUpload(file, 'video');
-      } else {
-        setErrors(prev => ({ 
-          ...prev, 
-          submit: `Please select a valid ${type} file` 
-        }));
-      }
-    }
-  };
-
-  const removeFile = (type: 'image' | 'video', index?: number) => {
-    if (type === 'image' && index !== undefined) {
-      setFormData(prev => ({ 
-        ...prev, 
-        images: prev.images.filter((_, i) => i !== index) 
-      }));
-      setImagePreviews(prev => prev.filter((_, i) => i !== index));
-    } else if (type === 'video') {
-      setFormData(prev => ({ ...prev, video: undefined }));
-      setVideoPreview(null);
-    }
-  };
-
-  // Step validation functions
-  const validateStep = (step: number): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    switch (step) {
-      case 1:
-        if (!selectedBrand) {
-          newErrors.brand = 'Please select a brand';
-        }
-        break;
-      case 2:
-        if (!formData.model) newErrors.model = 'Model is required';
-        if (!formData.year || formData.year < 1900 || formData.year > new Date().getFullYear() + 1) {
-          newErrors.year = 'Please enter a valid year';
-        }
-        break;
-      case 3:
-        if (!formData.vin || formData.vin.length < 17) {
-          newErrors.vin = 'VIN must be at least 17 characters';
-        }
-        if (!formData.color) newErrors.color = 'Color is required';
-        if (!formData.fuelType) newErrors.fuelType = 'Fuel type is required';
-        if (!formData.damageType) newErrors.damageType = 'Damage type is required';
-        if (!formData.bodyStyle) newErrors.bodyStyle = 'Body style is required';
-        if (!formData.price || formData.price <= 0) {
-          newErrors.price = 'Price must be greater than 0';
-        }
-        if (!formData.locationId) newErrors.locationId = 'Location is required';
-        break;
-      case 4:
-        if (formData.images.length < 3) {
-          newErrors.images = 'Minimum 3 images required';
-        }
-        break;
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.make) newErrors.make = 'Make is required';
-    if (!formData.model) newErrors.model = 'Model is required';
-    if (!formData.year || formData.year < 1900 || formData.year > new Date().getFullYear() + 1) {
-      newErrors.year = 'Please enter a valid year';
-    }
-    if (!formData.vin || formData.vin.length < 17) {
-      newErrors.vin = 'VIN must be at least 17 characters';
-    }
-    if (!formData.color) newErrors.color = 'Color is required';
-    if (!formData.fuelType) newErrors.fuelType = 'Fuel type is required';
-    if (!formData.damageType) newErrors.damageType = 'Damage type is required';
-    if (!formData.price || formData.price <= 0) {
-      newErrors.price = 'Price must be greater than 0';
-    }
-    if (!formData.bodyStyle) newErrors.bodyStyle = 'Body style is required';
-    if (!formData.locationId) newErrors.locationId = 'Location is required';
-    if (formData.images.length < 3) {
-      newErrors.images = 'Minimum 3 images required';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  // Step 5: Final submission
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); // CRITICAL: Prevent page refresh
-    
-    if (!validateForm()) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // Create FormData for multipart/form-data request
-      const submitData = new FormData();
-      submitData.append('Make', formData.make);
-      submitData.append('Model', formData.model);
-      submitData.append('Year', formData.year.toString());
-      submitData.append('Vin', formData.vin);
-      submitData.append('Color', formData.color);
-      submitData.append('BodyStyle', formData.bodyStyle);
-      submitData.append('LocationId', formData.locationId);
-      
-      // Add OwnerId (required by backend)
-      if (user?.user?.id) {
-        submitData.append('OwnerId', user.user.id);
-      } else {
-        setErrors({ 
-          submit: 'Authentication error: User ID not available. Please log in again.' 
-        });
-        setLoading(false);
-        return;
-      }
-      
-      // Add only the first image for initial creation
-      if (formData.images.length > 0) {
-        submitData.append('Image', formData.images[0]);
-      }
-      
-      // Submit to API
-      const response = await fetch('https://localhost:7249/api/Car', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token') || localStorage.getItem('authToken')}`
-        },
-        body: submitData
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        
-        // Upload additional images if any
-        if (formData.images.length > 1) {
-          await uploadAdditionalImages(result.id || result.carId, formData.images.slice(1));
-        }
-        
-        setShowSuccess(true);
-        setTimeout(() => {
-          navigate('/my-vehicles');
-        }, 2000);
-      } else {
-        const errorText = await response.text();
-        let errorMessage = 'Failed to create vehicle. Please try again.';
-        
-        try {
-          const errorJson = JSON.parse(errorText);
-          if (errorJson.message) {
-            errorMessage = errorJson.message;
-          } else if (errorJson.errors) {
-            const errorMessages = Object.values(errorJson.errors).flat();
-            errorMessage = errorMessages.join(', ');
-          }
-        } catch (parseError) {
-          console.log('Could not parse error response as JSON:', errorText);
-        }
-        
-        setErrors({ submit: errorMessage });
-      }
-    } catch (error) {
-      console.error('Error submitting vehicle:', error);
-      setErrors({ submit: 'Network error. Please check your connection and try again.' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const uploadAdditionalImages = async (carId: string, images: File[]) => {
-    try {
-      for (const image of images) {
-        const formData = new FormData();
-        formData.append('File', image);
-        
-        const response = await fetch(`https://localhost:7249/api/Car/${carId}/photo`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token') || localStorage.getItem('authToken')}`
-          },
-          body: formData
-        });
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Failed to upload image for car ${carId}:`, {
-            status: response.status,
-            statusText: response.statusText,
-            body: errorText
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error uploading additional images:', error);
-    }
-  };
-
-  // Generate year options
-  const yearOptions = Array.from({ length: 50 }, (_, i) => new Date().getFullYear() - i);
-
-
-  // Step Components
-  const Step1BrandSelection = () => {
-    // Filter brands based on search query
-    const filteredBrands = brandQuery === ''
+// Step Components - Extracted outside main component to prevent re-renders
+const Step1BrandSelection: React.FC<Step1Props> = ({ selectedBrand, brandQueryRef, handleBrandSelect, goToStep }) => {
+  // Filter brands based on search query
+  const getFilteredBrands = () => {
+    const query = brandQueryRef.current?.value || '';
+    return query === ''
       ? carMakes
       : carMakes.filter((brand) =>
-          brand.name.toLowerCase().includes(brandQuery.toLowerCase())
+          brand.name.toLowerCase().includes(query.toLowerCase())
         );
+  };
+  
+  const filteredBrands = getFilteredBrands();
 
-    return (
-      <div className="space-y-8 animate-fade-in">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mb-4">
-            <Car className="h-8 w-8 text-white" />
-          </div>
-          <h2 className="text-3xl font-bold text-white mb-2">Markanı Seçin</h2>
-          <p className="text-slate-300">Avtomobilinizin markasını seçin</p>
+  return (
+    <div className="space-y-8 animate-fade-in">
+      <div className="text-center">
+        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mb-4">
+          <Car className="h-8 w-8 text-white" />
         </div>
+        <h2 className="text-3xl font-bold text-white mb-2">Markanı Seçin</h2>
+        <p className="text-slate-300">Avtomobilinizin markasını seçin</p>
+      </div>
 
-        {/* Brand Selection Dropdown */}
-        <div className="max-w-2xl mx-auto">
-          <Combobox value={selectedBrand} onChange={handleBrandSelect}>
+      {/* Brand Selection Dropdown */}
+      <div className="max-w-2xl mx-auto">
+        <Combobox value={selectedBrand} onChange={handleBrandSelect}>
+          <div className="relative">
             <div className="relative">
-              <div className="relative">
-                <Combobox.Input
-                  className="w-full px-4 py-4 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 pr-12"
-                  placeholder="Marka axtarın..."
-                  value={brandQuery}
-                  onChange={(e) => setBrandQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault(); // Prevent form submission
-                    }
-                  }}
-                />
-                <Combobox.Button className="absolute inset-y-0 right-0 flex items-center pr-4">
-                  <ChevronDown className="h-5 w-5 text-slate-400" />
-                </Combobox.Button>
-              </div>
+              <Combobox.Input
+                ref={brandQueryRef}
+                className="w-full px-4 py-4 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 pr-12"
+                placeholder="Marka axtarın..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault(); // Prevent form submission
+                  }
+                }}
+              />
+              <Combobox.Button className="absolute inset-y-0 right-0 flex items-center pr-4">
+                <ChevronDown className="h-5 w-5 text-slate-400" />
+              </Combobox.Button>
+            </div>
 
-              <Combobox.Options className="absolute z-50 mt-2 w-full bg-slate-800/90 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-xl max-h-96 overflow-y-auto custom-scrollbar">
-                {/* Popular Brands Section */}
-                {brandQuery === '' && (
-                  <div className="p-4 border-b border-slate-700/50">
-                    <h3 className="text-sm font-semibold text-blue-300 mb-3 flex items-center gap-2">
-                      <Star className="h-4 w-4" />
-                      Məşhur Markalar
-                    </h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {popularBrands.map((brand) => (
-                        <button
-                          key={brand.id}
-                          type="button"
-                          onClick={() => handleBrandSelect(brand)}
-                          className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-700/50 transition-colors duration-200 text-left w-full"
-                        >
+            <Combobox.Options className="absolute z-50 mt-2 w-full bg-slate-800/90 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-xl max-h-96 overflow-y-auto custom-scrollbar">
+              {/* Popular Brands Section */}
+              {brandQueryRef.current?.value === '' && (
+                <div className="p-4 border-b border-slate-700/50">
+                  <h3 className="text-sm font-semibold text-blue-300 mb-3 flex items-center gap-2">
+                    <Star className="h-4 w-4" />
+                    Məşhur Markalar
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {popularBrands.map((brand) => (
+                      <button
+                        key={brand.id}
+                        type="button"
+                        onClick={() => handleBrandSelect(brand)}
+                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-700/50 transition-colors duration-200 text-left w-full"
+                      >
+                        <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center">
+                          <BrandIcon iconName={brand.iconName} className="w-5 h-5 text-blue-400" />
+                        </div>
+                        <span className="text-white font-medium text-sm">{brand.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Search Results */}
+              <div className="p-2">
+                {filteredBrands.length === 0 && brandQueryRef.current?.value !== '' ? (
+                  <div className="p-4 text-center text-slate-400">
+                    Heç bir marka tapılmadı
+                  </div>
+                ) : (
+                  filteredBrands.map((brand) => (
+                    <Combobox.Option
+                      key={brand.id}
+                      value={brand}
+                      className={({ active }) =>
+                        `relative cursor-pointer select-none py-3 px-4 rounded-lg transition-colors duration-200 ${
+                          active ? 'bg-slate-700/50' : ''
+                        }`
+                      }
+                    >
+                      {({ selected }) => (
+                        <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center">
                             <BrandIcon iconName={brand.iconName} className="w-5 h-5 text-blue-400" />
                           </div>
-                          <span className="text-white font-medium text-sm">{brand.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                          <span className={`font-medium text-sm ${
+                            selected ? 'text-blue-400' : 'text-white'
+                          }`}>
+                            {brand.name}
+                          </span>
+                          {selected && (
+                            <CheckCircle className="w-5 h-5 text-blue-400 ml-auto" />
+                          )}
+                        </div>
+                      )}
+                    </Combobox.Option>
+                  ))
                 )}
-
-                {/* Search Results */}
-                <div className="p-2">
-                  {filteredBrands.length === 0 && brandQuery !== '' ? (
-                    <div className="p-4 text-center text-slate-400">
-                      Heç bir marka tapılmadı
-                    </div>
-                  ) : (
-                    filteredBrands.map((brand) => (
-                      <Combobox.Option
-                        key={brand.id}
-                        value={brand}
-                        className={({ active }) =>
-                          `relative cursor-pointer select-none py-3 px-4 rounded-lg transition-colors duration-200 ${
-                            active ? 'bg-slate-700/50' : ''
-                          }`
-                        }
-                      >
-                        {({ selected }) => (
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center">
-                              <BrandIcon iconName={brand.iconName} className="w-5 h-5 text-blue-400" />
-                            </div>
-                            <span className={`font-medium text-sm ${
-                              selected ? 'text-blue-400' : 'text-white'
-                            }`}>
-                              {brand.name}
-                            </span>
-                            {selected && (
-                              <CheckCircle className="w-5 h-5 text-blue-400 ml-auto" />
-                            )}
-                          </div>
-                        )}
-                      </Combobox.Option>
-                    ))
-                  )}
-                </div>
-              </Combobox.Options>
-            </div>
-          </Combobox>
-        </div>
-
-        {/* Selected Brand Display */}
-        {selectedBrand && (
-          <div className="max-w-2xl mx-auto mt-6">
-            <div className="bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
-                  <BrandIcon iconName={selectedBrand.iconName} className="w-8 h-8 text-blue-400" />
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold text-lg">{selectedBrand.name}</h3>
-                  <p className="text-slate-400 text-sm">{selectedBrand.models.length} model mövcuddur</p>
-                </div>
-                <button 
-                  type="button"
-                  onClick={() => {
-                    setSelectedBrand(null);
-                    setFormData(prev => ({ ...prev, make: '', model: '' }));
-                    setBrandQuery('');
-                    goToStep(1);
-                  }}
-                  className="ml-auto text-sm text-blue-400 hover:text-blue-300 font-semibold"
-                >
-                  Dəyişdir
-                </button>
               </div>
+            </Combobox.Options>
+          </div>
+        </Combobox>
+      </div>
+
+      {/* Selected Brand Display */}
+      {selectedBrand && (
+        <div className="max-w-2xl mx-auto mt-6">
+          <div className="bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
+                <BrandIcon iconName={selectedBrand.iconName} className="w-8 h-8 text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-lg">{selectedBrand.name}</h3>
+                <p className="text-slate-400 text-sm">{selectedBrand.models.length} model mövcuddur</p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  handleBrandSelect(null);
+                  goToStep(1);
+                }}
+                className="ml-auto text-sm text-blue-400 hover:text-blue-300 font-semibold"
+              >
+                Dəyişdir
+              </button>
             </div>
           </div>
-        )}
-      </div>
-    );
-  };
+        </div>
+      )}
+    </div>
+  );
+};
 
-  const Step2ModelYear = () => (
+const Step2ModelYear: React.FC<Step2Props> = ({ 
+  errors, 
+  selectedBrand, 
+  selectedYear, 
+  modelInputValue, 
+  showModelDropdown, 
+  filteredModels, 
+  modelSearchTermRef, 
+  yearRef, 
+  handleModelSelect, 
+  handleModelInputChange, 
+  handleModelInputFocus, 
+  handleModelInputBlur, 
+  handleYearSelect 
+}) => {
+  // Generate year options
+  const yearOptions = Array.from({ length: 50 }, (_, i) => new Date().getFullYear() - i);
+
+  return (
     <div className="space-y-8 animate-fade-in">
       <div className="text-center">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-green-500 to-blue-600 rounded-full mb-4">
@@ -705,13 +353,16 @@ const AddVehicle: React.FC = () => {
           </label>
           <div className="relative">
             <input
+              ref={modelSearchTermRef}
               type="text"
-              value={modelSearchTerm}
-              onChange={(e) => setModelSearchTerm(e.target.value)}
+              value={modelInputValue}
+              onChange={handleModelInputChange}
+              onFocus={handleModelInputFocus}
+              onBlur={handleModelInputBlur}
               className="w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300"
               placeholder="Model axtarın..."
             />
-            {modelSearchTerm && (
+            {showModelDropdown && (
               <div className="absolute top-full left-0 right-0 mt-2 bg-slate-800/90 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-xl z-10 max-h-60 overflow-y-auto">
                 {filteredModels.map((model) => (
                   <button
@@ -741,7 +392,7 @@ const AddVehicle: React.FC = () => {
                 type="button"
                 onClick={() => handleYearSelect(year)}
                 className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
-                  formData.year === year
+                  selectedYear === year
                     ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/25'
                     : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50'
                 }`}
@@ -751,8 +402,7 @@ const AddVehicle: React.FC = () => {
             ))}
           </div>
           <select
-            value={formData.year}
-            onChange={(e) => handleYearSelect(parseInt(e.target.value))}
+            ref={yearRef}
             className="w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300"
           >
             {yearOptions.map(year => (
@@ -766,8 +416,34 @@ const AddVehicle: React.FC = () => {
       </div>
     </div>
   );
+};
 
-  const Step3TechnicalSpecs = () => (
+const Step3TechnicalSpecs: React.FC<Step3Props> = ({
+  formData,
+  errors,
+  selectedColor,
+  locationOptions,
+  vinRef,
+  bodyStyleRef,
+  fuelTypeRef,
+  damageTypeRef,
+  secondaryDamageRef,
+  transmissionRef,
+  driveTrainRef,
+  carConditionRef,
+  titleTypeRef,
+  mileageRef,
+  mileageUnitRef,
+  priceRef,
+  currencyRef,
+  locationIdRef,
+  hasKeysRef,
+  titleStateRef,
+  estimatedRetailValueRef,
+  handleInputChange,
+  handleColorSelect
+}) => {
+  return (
     <div className="space-y-8 animate-fade-in">
       <div className="text-center">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full mb-4">
@@ -777,157 +453,335 @@ const AddVehicle: React.FC = () => {
         <p className="text-slate-300">Avtomobilinizin texniki məlumatlarını daxil edin</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* VIN */}
-        <div className="space-y-2">
-          <label className="block text-white font-medium">
-            <Hash className="h-4 w-4 inline mr-2" />
-            VIN Nömrəsi *
-          </label>
-          <input
-            type="text"
-            value={formData.vin}
-            onChange={(e) => handleInputChange('vin', e.target.value.toUpperCase())}
-            maxLength={17}
-            className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${
-              errors.vin ? 'border-red-400' : ''
-            }`}
-            placeholder="VIN nömrəsini daxil edin"
-          />
-          {errors.vin && <p className="text-red-400 text-sm">{errors.vin}</p>}
-        </div>
-
-        {/* Body Style */}
-        <div className="space-y-2">
-          <label className="block text-white font-medium">
-            <Car className="h-4 w-4 inline mr-2" />
-            Gövdə Tipi *
-          </label>
-          <select
-            value={formData.bodyStyle}
-            onChange={(e) => handleInputChange('bodyStyle', e.target.value)}
-            className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${
-              errors.bodyStyle ? 'border-red-400' : ''
-            }`}
-          >
-            <option value="">Gövdə tipini seçin</option>
-            {bodyStyleOptions.map(style => (
-              <option key={style} value={style} className="bg-slate-800 text-white">
-                {style}
-              </option>
-            ))}
-          </select>
-          {errors.bodyStyle && <p className="text-red-400 text-sm">{errors.bodyStyle}</p>}
-        </div>
-
-        {/* Color Selection */}
-        <div className="space-y-2">
-          <label className="block text-white font-medium">
-            <Palette className="h-4 w-4 inline mr-2" />
-            Rəng *
-          </label>
-          <div className="grid grid-cols-4 gap-3">
-            {colorOptions.map((color) => (
-              <button
-                key={color.name}
-                type="button"
-                onClick={() => handleColorSelect(color.name)}
-                className={`relative p-3 rounded-xl border-2 transition-all duration-300 hover:scale-105 ${
-                  formData.color === color.name
-                    ? 'border-blue-400 shadow-lg shadow-blue-500/25'
-                    : 'border-slate-600 hover:border-slate-500'
+      {/* 3-Column Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Column 1: Basic Information */}
+        <div className="space-y-6">
+          <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Car className="h-5 w-5 text-blue-400" />
+              Əsas Məlumatlar
+            </h3>
+            
+            {/* VIN */}
+            <div className="space-y-2 mb-4">
+              <label className="block text-white font-medium">
+                <Hash className="h-4 w-4 inline mr-2" />
+                VIN Nömrəsi *
+              </label>
+              <input
+                ref={vinRef}
+                type="text"
+                value={formData.vin}
+                onChange={(e) => handleInputChange('vin', e.target.value.toUpperCase())}
+                maxLength={17}
+                aria-label="VIN nömrəsi"
+                aria-describedby="vin-help"
+                className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${
+                  errors.vin ? 'border-red-400' : ''
                 }`}
-                style={{ backgroundColor: color.hex }}
+                placeholder="VIN nömrəsini daxil edin"
+              />
+              <div id="vin-help" className="text-xs text-slate-400 mt-1">
+                VIN nömrəsi tam 17 simvol olmalıdır və yalnız hərflər və rəqəmlərdən ibarət olmalıdır
+              </div>
+              {errors.vin && <p className="text-red-400 text-sm">{errors.vin}</p>}
+            </div>
+
+            {/* Body Style */}
+            <div className="space-y-2 mb-4">
+              <label className="block text-white font-medium">
+                <Car className="h-4 w-4 inline mr-2" />
+                Gövdə Tipi *
+              </label>
+              <select
+                ref={bodyStyleRef}
+                value={formData.bodyStyle}
+                onChange={(e) => handleInputChange('bodyStyle', e.target.value)}
+                aria-label="Gövdə tipi seçimi"
+                className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${
+                  errors.bodyStyle ? 'border-red-400' : ''
+                }`}
               >
-                <span 
-                  className="text-xs font-medium"
-                  style={{ color: color.textColor }}
+                <option value="">Gövdə tipini seçin</option>
+                {bodyStyleOptions.map(style => (
+                  <option key={style} value={style} className="bg-slate-800 text-white">
+                    {style}
+                  </option>
+                ))}
+              </select>
+              {errors.bodyStyle && <p className="text-red-400 text-sm">{errors.bodyStyle}</p>}
+            </div>
+
+            {/* Color Selection */}
+            <div className="space-y-2">
+              <label className="block text-white font-medium">
+                <Palette className="h-4 w-4 inline mr-2" />
+                Rəng *
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {colorOptions.map((color) => (
+                  <button
+                    key={color.name}
+                    type="button"
+                    onClick={() => handleColorSelect(color.name)}
+                    aria-label={`${color.name} rəngini seç`}
+                    aria-pressed={selectedColor === color.name}
+                    className={`relative p-2 rounded-lg border-2 transition-all duration-300 hover:scale-105 ${
+                      selectedColor === color.name
+                        ? 'border-blue-400 shadow-lg shadow-blue-500/25'
+                        : 'border-slate-600 hover:border-slate-500'
+                    }`}
+                    style={{ backgroundColor: color.hex }}
+                  >
+                    <span 
+                      className="text-xs font-medium"
+                      style={{ color: color.textColor }}
+                    >
+                      {color.name}
+                    </span>
+                    {selectedColor === color.name && (
+                      <CheckCircle className="absolute -top-1 -right-1 w-4 h-4 text-blue-400 bg-white rounded-full" />
+                    )}
+                  </button>
+                ))}
+              </div>
+              {errors.color && <p className="text-red-400 text-sm">{errors.color}</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* Column 2: Technical Specifications */}
+        <div className="space-y-6">
+          <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Settings className="h-5 w-5 text-green-400" />
+              Texniki Spesifikasiyalar
+            </h3>
+            
+            {/* Fuel Type */}
+            <div className="space-y-2 mb-4">
+              <label className="block text-white font-medium">
+                <Fuel className="h-4 w-4 inline mr-2" />
+                Yanacaq Növü *
+              </label>
+              <select
+                ref={fuelTypeRef}
+                value={formData.fuelType}
+                onChange={(e) => handleInputChange('fuelType', parseInt(e.target.value))}
+                className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${errors.fuelType ? 'border-red-400' : ''}`}
+              >
+                <option value={0}>Yanacaq növünü seçin</option>
+                {fuelTypeOptions.map(option => (
+                  <option key={option.value} value={option.value} className="bg-slate-800 text-white">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {errors.fuelType && <p className="text-red-400 text-sm">{errors.fuelType}</p>}
+            </div>
+
+            {/* Transmission */}
+            <div className="space-y-2 mb-4">
+              <label className="block text-white font-medium">
+                <Settings className="h-4 w-4 inline mr-2" />
+                Ötürücü *
+              </label>
+              <select
+                ref={transmissionRef}
+                value={formData.transmission}
+                onChange={(e) => handleInputChange('transmission', parseInt(e.target.value))}
+                aria-label="Ötürücü növü seçimi"
+                className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${errors.transmission ? 'border-red-400' : ''}`}
+              >
+                <option value={0}>Ötürücü növünü seçin</option>
+                {transmissionOptions.map(option => (
+                  <option key={option.value} value={option.value} className="bg-slate-800 text-white">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {errors.transmission && <p className="text-red-400 text-sm">{errors.transmission}</p>}
+            </div>
+
+            {/* Drive Train */}
+            <div className="space-y-2 mb-4">
+              <label className="block text-white font-medium">
+                <Cog className="h-4 w-4 inline mr-2" />
+                Ötürücü Sistemi *
+              </label>
+              <select
+                ref={driveTrainRef}
+                value={formData.driveTrain}
+                onChange={(e) => handleInputChange('driveTrain', parseInt(e.target.value))}
+                aria-label="Ötürücü sistemi seçimi"
+                className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${errors.driveTrain ? 'border-red-400' : ''}`}
+              >
+                <option value={0}>Ötürücü sistemini seçin</option>
+                {driveTrainOptions.map(option => (
+                  <option key={option.value} value={option.value} className="bg-slate-800 text-white">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {errors.driveTrain && <p className="text-red-400 text-sm">{errors.driveTrain}</p>}
+            </div>
+
+            {/* Mileage */}
+            <div className="space-y-2">
+              <label className="block text-white font-medium">
+                <Gauge className="h-4 w-4 inline mr-2" />
+                Yürüş
+              </label>
+              <div className="flex gap-2">
+                <input
+                  ref={mileageRef}
+                  type="number"
+                  value={formData.mileage}
+                  onChange={(e) => handleInputChange('mileage', parseInt(e.target.value) || 0)}
+                  className="flex-1 px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300"
+                  placeholder="Yürüş məsafəsi"
+                />
+                <select
+                  ref={mileageUnitRef}
+                  value={formData.mileageUnit}
+                  onChange={(e) => handleInputChange('mileageUnit', e.target.value)}
+                  className="px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300"
                 >
-                  {color.name}
-                </span>
-                {formData.color === color.name && (
-                  <CheckCircle className="absolute -top-1 -right-1 w-5 h-5 text-blue-400 bg-white rounded-full" />
-                )}
-              </button>
-            ))}
-          </div>
-          {errors.color && <p className="text-red-400 text-sm">{errors.color}</p>}
-        </div>
-
-        {/* Fuel Type */}
-        <div className="space-y-2">
-          <label className="block text-white font-medium">
-            <Fuel className="h-4 w-4 inline mr-2" />
-            Yanacaq Növü *
-          </label>
-          <select
-            value={formData.fuelType}
-            onChange={(e) => handleInputChange('fuelType', e.target.value)}
-            className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${
-              errors.fuelType ? 'border-red-400' : ''
-            }`}
-          >
-            <option value="">Yanacaq növünü seçin</option>
-            {fuelTypeOptions.map(option => (
-              <option key={option.value} value={option.value} className="bg-slate-800 text-white">
-                {option.label}
-              </option>
-            ))}
-          </select>
-          {errors.fuelType && <p className="text-red-400 text-sm">{errors.fuelType}</p>}
-        </div>
-
-        {/* Damage Type */}
-        <div className="space-y-2">
-          <label className="block text-white font-medium">
-            <Wrench className="h-4 w-4 inline mr-2" />
-            Zədə Növü *
-          </label>
-          <select
-            value={formData.damageType}
-            onChange={(e) => handleInputChange('damageType', e.target.value)}
-            className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${
-              errors.damageType ? 'border-red-400' : ''
-            }`}
-          >
-            <option value="">Zədə növünü seçin</option>
-            {damageTypeOptions.map(option => (
-              <option key={option.value} value={option.value} className="bg-slate-800 text-white">
-                {option.label}
-              </option>
-            ))}
-          </select>
-          {errors.damageType && <p className="text-red-400 text-sm">{errors.damageType}</p>}
-        </div>
-
-        {/* Mileage */}
-        <div className="space-y-2">
-          <label className="block text-white font-medium">
-            <Gauge className="h-4 w-4 inline mr-2" />
-            Yürüş
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="number"
-              value={formData.mileage}
-              onChange={(e) => handleInputChange('mileage', parseInt(e.target.value) || 0)}
-              className="flex-1 px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300"
-              placeholder="Yürüş məsafəsi"
-            />
-            <select
-              value={formData.mileageUnit}
-              onChange={(e) => handleInputChange('mileageUnit', e.target.value)}
-              className="px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300"
-            >
-              {mileageUnitOptions.map(option => (
-                <option key={option.value} value={option.value} className="bg-slate-800 text-white">
-                  {option.label}
-                </option>
-              ))}
-            </select>
+                  {mileageUnitOptions.map(option => (
+                    <option key={option.value} value={option.value} className="bg-slate-800 text-white">
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 
+        {/* Column 3: Condition & Legal */}
+        <div className="space-y-6">
+          <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Shield className="h-5 w-5 text-purple-400" />
+              Vəziyyət və Hüquqi
+            </h3>
+            
+            {/* Damage Type */}
+            <div className="space-y-2 mb-4">
+              <label className="block text-white font-medium">
+                <Wrench className="h-4 w-4 inline mr-2" />
+                Zədə Növü *
+              </label>
+              <select
+                ref={damageTypeRef}
+                value={formData.damageType}
+                onChange={(e) => handleInputChange('damageType', parseInt(e.target.value))}
+                className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${errors.damageType ? 'border-red-400' : ''}`}
+              >
+                <option value={0}>Zədə növünü seçin</option>
+                {damageTypeOptions.map(option => (
+                  <option key={option.value} value={option.value} className="bg-slate-800 text-white">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {errors.damageType && <p className="text-red-400 text-sm">{errors.damageType}</p>}
+            </div>
+
+            {/* Secondary Damage */}
+            <div className="space-y-2 mb-4">
+              <label className="block text-white font-medium">
+                <Wrench className="h-4 w-4 inline mr-2" />
+                İkincil Zədə
+              </label>
+              <select
+                ref={secondaryDamageRef}
+                value={formData.secondaryDamage}
+                onChange={(e) => handleInputChange('secondaryDamage', parseInt(e.target.value))}
+                className="w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300"
+              >
+                <option value={0}>İkincil zədə seçin</option>
+                {secondaryDamageOptions.map(option => (
+                  <option key={option.value} value={option.value} className="bg-slate-800 text-white">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Car Condition */}
+            <div className="space-y-2 mb-4">
+              <label className="block text-white font-medium">
+                <Shield className="h-4 w-4 inline mr-2" />
+                Avtomobil Vəziyyəti *
+              </label>
+              <select
+                ref={carConditionRef}
+                value={formData.carCondition}
+                onChange={(e) => handleInputChange('carCondition', parseInt(e.target.value))}
+                aria-label="Avtomobil vəziyyəti seçimi"
+                className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${errors.carCondition ? 'border-red-400' : ''}`}
+              >
+                <option value={0}>Avtomobil vəziyyətini seçin</option>
+                {carConditionOptions.map(option => (
+                  <option key={option.value} value={option.value} className="bg-slate-800 text-white">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {errors.carCondition && <p className="text-red-400 text-sm">{errors.carCondition}</p>}
+            </div>
+
+            {/* Title Type */}
+            <div className="space-y-2 mb-4">
+              <label className="block text-white font-medium">
+                <FileText className="h-4 w-4 inline mr-2" />
+                Sənəd Növü *
+              </label>
+              <select
+                ref={titleTypeRef}
+                value={formData.titleType}
+                onChange={(e) => handleInputChange('titleType', parseInt(e.target.value))}
+                aria-label="Sənəd növü seçimi"
+                className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${errors.titleType ? 'border-red-400' : ''}`}
+              >
+                <option value={0}>Sənəd növünü seçin</option>
+                {titleTypeOptions.map(option => (
+                  <option key={option.value} value={option.value} className="bg-slate-800 text-white">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {errors.titleType && <p className="text-red-400 text-sm">{errors.titleType}</p>}
+            </div>
+
+            {/* Has Keys */}
+            <div className="space-y-2">
+              <label className="block text-white font-medium">
+                <Settings className="h-4 w-4 inline mr-2" />
+                Açarı Var?
+              </label>
+              <select
+                ref={hasKeysRef}
+                value={formData.hasKeys.toString()}
+                onChange={(e) => handleInputChange('hasKeys', e.target.value === 'true')}
+                className="w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300"
+              >
+                {hasKeysOptions.map(option => (
+                  <option key={option.value.toString()} value={option.value.toString()} className="bg-slate-800 text-white">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Row: Price, Location, and Additional Fields */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Price */}
         <div className="space-y-2">
           <label className="block text-white font-medium">
@@ -936,6 +790,7 @@ const AddVehicle: React.FC = () => {
           </label>
           <div className="flex gap-2">
             <input
+              ref={priceRef}
               type="number"
               value={formData.price}
               onChange={(e) => handleInputChange('price', parseFloat(e.target.value) || 0)}
@@ -945,6 +800,7 @@ const AddVehicle: React.FC = () => {
               placeholder="Qiymət"
             />
             <select
+              ref={currencyRef}
               value={formData.currency}
               onChange={(e) => handleInputChange('currency', e.target.value)}
               className="px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300"
@@ -966,6 +822,7 @@ const AddVehicle: React.FC = () => {
             Məkan *
           </label>
           <select
+            ref={locationIdRef}
             value={formData.locationId}
             onChange={(e) => handleInputChange('locationId', e.target.value)}
             className={`w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300 ${
@@ -981,11 +838,62 @@ const AddVehicle: React.FC = () => {
           </select>
           {errors.locationId && <p className="text-red-400 text-sm">{errors.locationId}</p>}
         </div>
+
+        {/* Title State */}
+        <div className="space-y-2">
+          <label className="block text-white font-medium">
+            <FileText className="h-4 w-4 inline mr-2" />
+            Sənəd Ştatı
+          </label>
+          <select
+            ref={titleStateRef}
+            value={formData.titleState}
+            onChange={(e) => handleInputChange('titleState', e.target.value)}
+            className="w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300"
+          >
+            {titleStateOptions.map(option => (
+              <option key={option.value} value={option.value} className="bg-slate-800 text-white">
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+
+      {/* Estimated Retail Value - Conditional rendering based on TitleType */}
+      {(formData.titleType === 1 || formData.titleType === 5) && (
+        <div className="space-y-2">
+          <label className="block text-white font-medium">
+            <DollarSign className="h-4 w-4 inline mr-2" />
+            Təxmini Satış Qiyməti
+          </label>
+          <input
+            ref={estimatedRetailValueRef}
+            type="number"
+            value={formData.estimatedRetailValue}
+            onChange={(e) => handleInputChange('estimatedRetailValue', parseFloat(e.target.value) || 0)}
+            className="w-full px-4 py-3 bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-blue-400 focus:bg-slate-800/60 transition-all duration-300"
+            placeholder="Təxmini satış qiyməti"
+          />
+        </div>
+      )}
     </div>
   );
+};
 
-  const Step4MediaUpload = () => (
+const Step4MediaUpload: React.FC<Step4Props> = ({
+  images,
+  imagePreviews,
+  videoPreview,
+  dragOver,
+  errors,
+  handleFileInputChange,
+  handleDragOver,
+  handleDragLeave,
+  handleDrop,
+  removeFile
+}) => {
+  return (
     <div className="space-y-8 animate-fade-in">
       <div className="text-center">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-orange-500 to-red-600 rounded-full mb-4">
@@ -999,7 +907,7 @@ const AddVehicle: React.FC = () => {
         {/* Image Upload */}
         <div className="space-y-4">
           <label className="block text-white font-medium text-lg">
-            Şəkillər ({formData.images.length}/15)
+            Şəkillər ({images.length}/15)
           </label>
           
           {/* Image Previews */}
@@ -1028,7 +936,7 @@ const AddVehicle: React.FC = () => {
           <div
             className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 ${
               dragOver ? 'border-blue-400 bg-blue-400/20' : 'border-slate-600/50'
-            } ${formData.images.length >= 15 ? 'opacity-50 cursor-not-allowed' : ''}`}
+            } ${images.length >= 15 ? 'opacity-50 cursor-not-allowed' : ''}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, 'image')}
@@ -1046,12 +954,12 @@ const AddVehicle: React.FC = () => {
                 onChange={(e) => handleFileInputChange(e, 'image')}
                 className="hidden"
                 id="image-upload"
-                disabled={formData.images.length >= 15}
+                disabled={images.length >= 15}
               />
               <label
                 htmlFor="image-upload"
                 className={`inline-block px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
-                  formData.images.length >= 15 
+                  images.length >= 15 
                     ? 'bg-gray-500 text-gray-300 cursor-not-allowed' 
                     : 'bg-blue-500 text-white hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/25'
                 }`}
@@ -1119,8 +1027,18 @@ const AddVehicle: React.FC = () => {
       </div>
     </div>
   );
+};
 
-  const Step5Review = () => (
+const Step5Review: React.FC<Step5Props> = ({
+  formData,
+  selectedBrand,
+  selectedColor,
+  locationOptions,
+  images,
+  errors,
+  loading
+}) => {
+  return (
     <div className="space-y-8 animate-fade-in">
       <div className="text-center">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-full mb-4">
@@ -1131,14 +1049,18 @@ const AddVehicle: React.FC = () => {
       </div>
 
       <div className="bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Vehicle Info */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* Column 1: Vehicle Information */}
           <div className="space-y-4">
-            <h3 className="text-xl font-semibold text-white mb-4">Avtomobil Məlumatları</h3>
+            <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+              <Car className="h-5 w-5 text-blue-400" />
+              Avtomobil Məlumatları
+            </h3>
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-slate-400">Marka:</span>
-                <span className="text-white font-medium">{formData.make}</span>
+                <span className="text-white font-medium">{selectedBrand?.name || ''}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Model:</span>
@@ -1150,48 +1072,131 @@ const AddVehicle: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">VIN:</span>
-                <span className="text-white font-medium">{formData.vin}</span>
+                <span className="text-white font-medium font-mono text-sm">{formData.vin}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Rəng:</span>
-                <span className="text-white font-medium">{formData.color}</span>
+                <span className="text-white font-medium">{selectedColor}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Yanacaq:</span>
-                <span className="text-white font-medium">{formData.fuelType}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Technical Details */}
-          <div className="space-y-4">
-            <h3 className="text-xl font-semibold text-white mb-4">Texniki Detallar</h3>
-            <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-slate-400">Gövdə Tipi:</span>
                 <span className="text-white font-medium">{formData.bodyStyle}</span>
               </div>
+            </div>
+          </div>
+
+          {/* Column 2: Technical Specifications */}
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+              <Settings className="h-5 w-5 text-green-400" />
+              Texniki Spesifikasiyalar
+            </h3>
+            <div className="space-y-3">
               <div className="flex justify-between">
-                <span className="text-slate-400">Zədə:</span>
-                <span className="text-white font-medium">{formData.damageType}</span>
+                <span className="text-slate-400">Yanacaq:</span>
+                <span className="text-white font-medium">{getEnumLabel('FuelType', formData.fuelType)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Ötürücü:</span>
+                <span className="text-white font-medium">{getEnumLabel('Transmission', formData.transmission)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Ötürücü Sistemi:</span>
+                <span className="text-white font-medium">{getEnumLabel('DriveTrain', formData.driveTrain)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Yürüş:</span>
-                <span className="text-white font-medium">{formData.mileage} {formData.mileageUnit}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Qiymət:</span>
-                <span className="text-white font-medium">{formData.price} {formData.currency}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Məkan:</span>
                 <span className="text-white font-medium">
-                  {locationOptions.find(loc => loc.id === formData.locationId)?.name || 'Seçilməyib'}
+                  {formData.mileage > 0 ? `${formData.mileage.toLocaleString()} ${formData.mileageUnit}` : 'Məlumat yoxdur'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Şəkillər:</span>
-                <span className="text-white font-medium">{formData.images.length} şəkil</span>
+                <span className="text-slate-400">Açarı Var:</span>
+                <span className="text-white font-medium">{formData.hasKeys ? 'Bəli' : 'Xeyr'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Column 3: Condition & Legal */}
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+              <Shield className="h-5 w-5 text-purple-400" />
+              Vəziyyət və Hüquqi
+            </h3>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Zədə Növü:</span>
+                <span className="text-white font-medium">{getEnumLabel('DamageType', formData.damageType)}</span>
+              </div>
+              {formData.secondaryDamage > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">İkincil Zədə:</span>
+                  <span className="text-white font-medium">{getEnumLabel('DamageType', formData.secondaryDamage)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-slate-400">Avtomobil Vəziyyəti:</span>
+                <span className="text-white font-medium">{getEnumLabel('CarCondition', formData.carCondition)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Sənəd Növü:</span>
+                <span className="text-white font-medium">{getEnumLabel('TitleType', formData.titleType)}</span>
+              </div>
+              {formData.titleState && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Sənəd Ştatı:</span>
+                  <span className="text-white font-medium">{formData.titleState}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Row: Pricing and Location */}
+        <div className="mt-8 pt-6 border-t border-slate-700/50">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            {/* Pricing Information */}
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-yellow-400" />
+                Qiymət Məlumatları
+              </h3>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Qiymət:</span>
+                  <span className="text-white font-medium text-lg">
+                    {formData.price.toLocaleString()} {formData.currency}
+                  </span>
+                </div>
+                {formData.estimatedRetailValue > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Təxmini Satış Qiyməti:</span>
+                    <span className="text-white font-medium">
+                      {formData.estimatedRetailValue.toLocaleString()} {formData.currency}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Location and Media */}
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                <Car className="h-5 w-5 text-indigo-400" />
+                Məkan və Media
+              </h3>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Məkan:</span>
+                  <span className="text-white font-medium">
+                    {locationOptions.find(loc => loc.id === formData.locationId)?.name || 'Seçilməyib'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Şəkillər:</span>
+                  <span className="text-white font-medium">{images.length} şəkil</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1209,7 +1214,6 @@ const AddVehicle: React.FC = () => {
         <div className="mt-8">
           <button
             type="submit"
-            onClick={handleSubmit}
             disabled={loading}
             className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-8 py-4 rounded-xl font-semibold hover:from-emerald-600 hover:to-teal-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-lg hover:shadow-xl hover:shadow-emerald-500/25"
           >
@@ -1229,6 +1233,683 @@ const AddVehicle: React.FC = () => {
       </div>
     </div>
   );
+};
+
+const AddVehicle: React.FC = () => {
+  const { user, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  
+  // Wizard state
+  const [currentStep, setCurrentStep] = useState(1);
+  const [selectedBrand, setSelectedBrand] = useState<CarMake | null>(null);
+  const [filteredModels, setFilteredModels] = useState<string[]>([]);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [modelInputValue, setModelInputValue] = useState('');
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  
+  // Unified form data state - single source of truth with numeric defaults
+  const [formData, setFormData] = useState<VehicleFormData>({
+    // Basic Information
+    make: '',
+    model: '',
+    year: new Date().getFullYear(),
+    vin: '',
+    color: '',
+    bodyStyle: '',
+    
+    // Enum Fields (numeric values matching backend - all start with 0 for Unknown)
+    fuelType: 0,
+    damageType: 0,
+    secondaryDamage: 0,
+    transmission: 0,
+    driveTrain: 0,
+    carCondition: 0,
+    titleType: 0,
+    
+    // Additional Fields
+    mileage: 0,
+    mileageUnit: 'km',
+    price: 0,
+    currency: 'AZN',
+    locationId: '',
+    hasKeys: false,
+    titleState: '',
+    estimatedRetailValue: 0
+  });
+  
+  // Brand and model refs
+  const brandQueryRef = useRef<HTMLInputElement>(null);
+  const modelSearchTermRef = useRef<HTMLInputElement>(null);
+  
+  // Form refs - comprehensive ref management system
+  const yearRef = useRef<HTMLSelectElement>(null);
+  const mileageRef = useRef<HTMLInputElement>(null);
+  const mileageUnitRef = useRef<HTMLSelectElement>(null);
+  const vinRef = useRef<HTMLInputElement>(null);
+  const fuelTypeRef = useRef<HTMLSelectElement>(null);
+  const damageTypeRef = useRef<HTMLSelectElement>(null);
+  const secondaryDamageRef = useRef<HTMLSelectElement>(null);
+  const transmissionRef = useRef<HTMLSelectElement>(null);
+  const driveTrainRef = useRef<HTMLSelectElement>(null);
+  const carConditionRef = useRef<HTMLSelectElement>(null);
+  const titleTypeRef = useRef<HTMLSelectElement>(null);
+  const priceRef = useRef<HTMLInputElement>(null);
+  const currencyRef = useRef<HTMLSelectElement>(null);
+  const bodyStyleRef = useRef<HTMLSelectElement>(null);
+  const locationIdRef = useRef<HTMLSelectElement>(null);
+  const hasKeysRef = useRef<HTMLSelectElement>(null);
+  const titleStateRef = useRef<HTMLSelectElement>(null);
+  const estimatedRetailValueRef = useRef<HTMLInputElement>(null);
+  
+  // State for non-input data
+  const [images, setImages] = useState<File[]>([]);
+  const [selectedColor, setSelectedColor] = useState('');
+
+  const [locationOptions, setLocationOptions] = useState<LocationOption[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<ValidationErrors>({});
+  const [dragOver, setDragOver] = useState(false);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  // Role-based access control
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    const roles = user?.user?.roles;
+    const isSeller = roles && roles.includes('Seller');
+    
+    if (!isSeller) {
+      navigate('/dashboard');
+      return;
+    }
+  }, [isAuthenticated, user, navigate]);
+
+  // Set default values for refs
+  useEffect(() => {
+    const currentYear = new Date().getFullYear();
+    if (yearRef.current) {
+      yearRef.current.value = currentYear.toString();
+    }
+    if (mileageUnitRef.current) {
+      mileageUnitRef.current.value = 'km';
+    }
+    if (currencyRef.current) {
+      currencyRef.current.value = 'AZN';
+    }
+    setSelectedYear(currentYear);
+  }, []);
+
+  // Load locations data
+  useEffect(() => {
+    loadLocations();
+  }, []);
+
+  const loadLocations = async () => {
+    try {
+      const rawLocations = await apiClient.getLocations();
+      let processedLocations: {id: string, name: string}[] = [];
+      
+      if (Array.isArray(rawLocations) && rawLocations.length > 0) {
+        const hasIdAndName = rawLocations.every(item => 
+          typeof item === 'object' && 
+          item !== null && 
+          typeof item.id === 'string' && 
+          (typeof item.name === 'string' || typeof item.city === 'string')
+        );
+        
+        if (hasIdAndName) {
+          processedLocations = rawLocations.map(loc => ({
+            id: loc.id,
+            name: loc.name || loc.city || 'Unknown Location'
+          }));
+        } else if (rawLocations.every(item => typeof item === 'string')) {
+          processedLocations = rawLocations.map((name, index) => ({
+            id: `mock-location-${index}-${Date.now()}`,
+            name: name
+          }));
+        }
+      }
+      
+      setLocationOptions(processedLocations);
+    } catch (error) {
+      console.error('Error loading locations:', error);
+      const fallbackLocations = [
+        { id: 'fallback-1', name: 'Baku' },
+        { id: 'fallback-2', name: 'Ganja' },
+        { id: 'fallback-3', name: 'Sumgayit' },
+        { id: 'fallback-4', name: 'Mingachevir' },
+        { id: 'fallback-5', name: 'Lankaran' }
+      ];
+      setLocationOptions(fallbackLocations);
+    }
+  };
+
+  // Wizard navigation functions
+  const nextStep = () => {
+    if (currentStep < 5) {
+      setCurrentStep(prev => prev + 1);
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(prev => prev - 1);
+    }
+  };
+
+  const goToStep = (step: number) => {
+    if (step >= 1 && step <= 5) {
+      setCurrentStep(step);
+    }
+  };
+
+  // Step 1: Brand selection
+  const handleBrandSelect = (brand: CarMake | null) => {
+    if (!brand) return;
+    setSelectedBrand(brand);
+    setFormData(prev => ({ ...prev, make: brand.name, model: '' }));
+    if (brandQueryRef.current) {
+      brandQueryRef.current.value = brand.name;
+    }
+    if (modelSearchTermRef.current) {
+      modelSearchTermRef.current.value = '';
+    }
+    setFilteredModels(brand.models);
+    setShowModelDropdown(false);
+    setSelectedYear(null);
+    setModelInputValue('');
+    nextStep();
+  };
+
+  // Step 2: Model and year selection
+  const handleModelSelect = (model: string) => {
+    setFormData(prev => ({ ...prev, model }));
+    if (modelSearchTermRef.current) {
+      modelSearchTermRef.current.value = model;
+    }
+    setModelInputValue(model);
+    setShowModelDropdown(false);
+  };
+
+  const handleModelInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (modelSearchTermRef.current) {
+      modelSearchTermRef.current.value = value;
+    }
+    setModelInputValue(value);
+    setFormData(prev => ({ ...prev, model: value }));
+    
+    // Update filtered models and dropdown visibility
+    if (selectedBrand) {
+      const filtered = selectedBrand.models.filter(model =>
+        model.toLowerCase().includes(value.toLowerCase())
+      );
+      setFilteredModels(filtered);
+    }
+    
+    // Show dropdown if there's input
+    setShowModelDropdown(value.length > 0);
+  };
+
+  const handleModelInputFocus = () => {
+    setShowModelDropdown(modelInputValue.length > 0);
+  };
+
+  const handleModelInputBlur = () => {
+    // Delay hiding to allow click on dropdown items
+    setTimeout(() => setShowModelDropdown(false), 150);
+  };
+
+  const handleYearSelect = (year: number) => {
+    setFormData(prev => ({ ...prev, year }));
+    if (yearRef.current) {
+      yearRef.current.value = year.toString();
+    }
+    setSelectedYear(year);
+  };
+
+  const handleColorSelect = (color: string) => {
+    setSelectedColor(color);
+    setFormData(prev => ({ ...prev, color }));
+  };
+
+  // General input change handler for formData - type-safe
+  const handleInputChange = (field: keyof VehicleFormData, value: string | number | boolean) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  // Step 4: File upload functions
+  const handleFileUpload = (file: File, type: 'image' | 'video') => {
+    if (type === 'image') {
+      if (images.length >= 15) {
+        setErrors(prev => ({ 
+          ...prev, 
+          submit: 'Maksimum 15 şəkil icazə verilir' 
+        }));
+        return;
+      }
+
+      setImages(prev => [...prev, file]);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        setImagePreviews(prev => [...prev, result]);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => setVideoPreview(e.target?.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
+    const files = Array.from(e.target.files || []);
+    
+    if (type === 'image') {
+      if (images.length + files.length > 15) {
+        setErrors(prev => ({ 
+          ...prev, 
+          submit: `Maksimum 15 şəkil icazə verilir. ${15 - images.length} şəkil daha əlavə edə bilərsiniz.` 
+        }));
+        return;
+      }
+
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) {
+          setErrors(prev => ({ 
+            ...prev, 
+            submit: 'Zəhmət olmasa düzgün şəkil faylları seçin' 
+          }));
+          return;
+        }
+
+        const maxSize = 10 * 1024 * 1024;
+        if (file.size > maxSize) {
+          setErrors(prev => ({ 
+            ...prev, 
+            submit: `Fayl ölçüsü çox böyükdür. Şəkillər üçün maksimum 10MB icazə verilir` 
+          }));
+          return;
+        }
+
+        handleFileUpload(file, type);
+      }
+    } else {
+      const file = files[0];
+      if (file) {
+        if (!file.type.startsWith('video/')) {
+          setErrors(prev => ({ 
+            ...prev, 
+            submit: 'Zəhmət olmasa düzgün video faylı seçin' 
+          }));
+          return;
+        }
+
+        const maxSize = 50 * 1024 * 1024;
+        if (file.size > maxSize) {
+          setErrors(prev => ({ 
+            ...prev, 
+            submit: `Fayl ölçüsü çox böyükdür. Videolar üçün maksimum 50MB icazə verilir` 
+          }));
+          return;
+        }
+
+        handleFileUpload(file, type);
+      }
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent, type: 'image' | 'video') => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    const file = files[0];
+    
+    if (file) {
+      if (type === 'image' && file.type.startsWith('image/')) {
+        handleFileUpload(file, 'image');
+      } else if (type === 'video' && file.type.startsWith('video/')) {
+        handleFileUpload(file, 'video');
+      } else {
+        setErrors(prev => ({ 
+          ...prev, 
+          submit: `Zəhmət olmasa düzgün ${type} faylı seçin` 
+        }));
+      }
+    }
+  };
+
+  const removeFile = (type: 'image' | 'video', index?: number) => {
+    if (type === 'image' && index !== undefined) {
+      setImages(prev => prev.filter((_, i) => i !== index));
+      setImagePreviews(prev => prev.filter((_, i) => i !== index));
+    } else if (type === 'video') {
+      setVideoPreview(null);
+    }
+  };
+
+  // Enhanced validation functions with comprehensive field validation
+  const validateStep = (step: number): boolean => {
+    const newErrors: ValidationErrors = {};
+
+    switch (step) {
+      case 1:
+        if (!selectedBrand) {
+          newErrors.brand = 'Marka seçilməlidir';
+        }
+        break;
+      case 2:
+        if (!formData.model || formData.model.trim() === '') {
+          newErrors.model = 'Model tələb olunur';
+        }
+        if (!formData.year || formData.year < 1900 || formData.year > new Date().getFullYear() + 1) {
+          newErrors.year = 'Düzgün il daxil edin';
+        }
+        break;
+      case 3:
+        // Enhanced VIN validation with regex
+        if (!formData.vin || formData.vin.length !== 17) {
+          newErrors.vin = 'VIN nömrəsi tam 17 simvol olmalıdır';
+        } else if (!/^[A-HJ-NPR-Z0-9]{17}$/i.test(formData.vin)) {
+          newErrors.vin = 'VIN nömrəsi yalnız hərflər və rəqəmlərdən ibarət olmalıdır (I, O, Q istisna)';
+        }
+        
+        // Color validation
+        if (!selectedColor) newErrors.color = 'Rəng seçilməlidir';
+        
+        // Enum field validations (numeric values)
+        if (formData.fuelType === 0) newErrors.fuelType = 'Yanacaq növü seçilməlidir';
+        if (formData.damageType === 0) newErrors.damageType = 'Zədə növü seçilməlidir';
+        if (formData.transmission === 0) newErrors.transmission = 'Ötürücü seçilməlidir';
+        if (formData.driveTrain === 0) newErrors.driveTrain = 'Ötürücü sistemi seçilməlidir';
+        if (formData.carCondition === 0) newErrors.carCondition = 'Avtomobil vəziyyəti seçilməlidir';
+        if (formData.titleType === 0) newErrors.titleType = 'Sənəd növü seçilməlidir';
+        
+        // Basic field validations
+        if (!formData.bodyStyle) newErrors.bodyStyle = 'Gövdə tipi seçilməlidir';
+        if (!formData.locationId) newErrors.locationId = 'Məkan seçilməlidir';
+        
+        // Price validation with reasonable limits
+        if (!formData.price || formData.price <= 0) {
+          newErrors.price = 'Qiymət 0-dan böyük olmalıdır';
+        } else if (formData.price > 1000000) {
+          newErrors.price = 'Qiymət çox yüksəkdir (maksimum 1,000,000)';
+        }
+        
+        // Mileage validation
+        if (formData.mileage < 0) {
+          newErrors.mileage = 'Yürüş mənfi ola bilməz';
+        } else if (formData.mileage > 999999) {
+          newErrors.mileage = 'Yürüş çox yüksəkdir (maksimum 999,999)';
+        }
+        
+        // Estimated Retail Value validation (conditional)
+        if ((formData.titleType === 1 || formData.titleType === 5) && formData.estimatedRetailValue > 0) {
+          if (formData.estimatedRetailValue > formData.price * 2) {
+            newErrors.estimatedRetailValue = 'Təxmini satış qiyməti əsas qiymətdən çox yüksəkdir';
+          }
+        }
+        
+        break;
+      case 4:
+        if (images.length < 3) {
+          newErrors.images = 'Minimum 3 şəkil tələb olunur';
+        } else if (images.length > 15) {
+          newErrors.images = 'Maksimum 15 şəkil icazə verilir';
+        }
+        break;
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateForm = (): boolean => {
+    const newErrors: ValidationErrors = {};
+
+    // Basic information validation
+    if (!selectedBrand) newErrors.make = 'Marka tələb olunur';
+    if (!formData.model || formData.model.trim() === '') newErrors.model = 'Model tələb olunur';
+    if (!formData.year || formData.year < 1900 || formData.year > new Date().getFullYear() + 1) {
+      newErrors.year = 'Düzgün il daxil edin';
+    }
+    
+    // Enhanced VIN validation
+    if (!formData.vin || formData.vin.length !== 17) {
+      newErrors.vin = 'VIN nömrəsi tam 17 simvol olmalıdır';
+    } else if (!/^[A-HJ-NPR-Z0-9]{17}$/i.test(formData.vin)) {
+      newErrors.vin = 'VIN nömrəsi yalnız hərflər və rəqəmlərdən ibarət olmalıdır (I, O, Q istisna)';
+    }
+    
+    // Color validation
+    if (!selectedColor) newErrors.color = 'Rəng seçilməlidir';
+    
+    // Enum field validations (numeric values)
+    if (formData.fuelType === 0) newErrors.fuelType = 'Yanacaq növü seçilməlidir';
+    if (formData.damageType === 0) newErrors.damageType = 'Zədə növü seçilməlidir';
+    if (formData.transmission === 0) newErrors.transmission = 'Ötürücü seçilməlidir';
+    if (formData.driveTrain === 0) newErrors.driveTrain = 'Ötürücü sistemi seçilməlidir';
+    if (formData.carCondition === 0) newErrors.carCondition = 'Avtomobil vəziyyəti seçilməlidir';
+    if (formData.titleType === 0) newErrors.titleType = 'Sənəd növü seçilməlidir';
+    
+    // Basic field validations
+    if (!formData.bodyStyle) newErrors.bodyStyle = 'Gövdə tipi seçilməlidir';
+    if (!formData.locationId) newErrors.locationId = 'Məkan seçilməlidir';
+    
+    // Price validation with reasonable limits
+    if (!formData.price || formData.price <= 0) {
+      newErrors.price = 'Qiymət 0-dan böyük olmalıdır';
+    } else if (formData.price > 1000000) {
+      newErrors.price = 'Qiymət çox yüksəkdir (maksimum 1,000,000)';
+    }
+    
+    // Mileage validation
+    if (formData.mileage < 0) {
+      newErrors.mileage = 'Yürüş mənfi ola bilməz';
+    } else if (formData.mileage > 999999) {
+      newErrors.mileage = 'Yürüş çox yüksəkdir (maksimum 999,999)';
+    }
+    
+    // Estimated Retail Value validation (conditional)
+    if ((formData.titleType === 1 || formData.titleType === 5) && formData.estimatedRetailValue > 0) {
+      if (formData.estimatedRetailValue > formData.price * 2) {
+        newErrors.estimatedRetailValue = 'Təxmini satış qiyməti əsas qiymətdən çox yüksəkdir';
+      }
+    }
+    
+    // Image validation
+    if (images.length < 3) {
+      newErrors.images = 'Minimum 3 şəkil tələb olunur';
+    } else if (images.length > 15) {
+      newErrors.images = 'Maksimum 15 şəkil icazə verilir';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Step 5: Final submission - Optimized with comprehensive field handling
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+
+    setLoading(true);
+    setErrors({}); // Clear previous errors
+    
+    try {
+      const submitData = new FormData();
+      
+      // Basic Information
+      submitData.append('Make', formData.make);
+      submitData.append('Model', formData.model);
+      submitData.append('Year', formData.year.toString());
+      submitData.append('Vin', formData.vin);
+      submitData.append('Color', selectedColor); // Use selectedColor state
+      submitData.append('BodyStyle', formData.bodyStyle);
+      submitData.append('LocationId', formData.locationId);
+      
+      // Enum Fields (numeric values matching backend)
+      submitData.append('FuelType', formData.fuelType.toString());
+      submitData.append('DamageType', formData.damageType.toString());
+      submitData.append('SecondaryDamage', formData.secondaryDamage.toString());
+      submitData.append('Transmission', formData.transmission.toString());
+      submitData.append('DriveTrain', formData.driveTrain.toString());
+      submitData.append('CarCondition', formData.carCondition.toString());
+      submitData.append('TitleType', formData.titleType.toString());
+      
+      // Additional Fields
+      submitData.append('Price', formData.price.toString());
+      submitData.append('Currency', formData.currency);
+      submitData.append('Mileage', formData.mileage.toString());
+      submitData.append('MileageUnit', formData.mileageUnit);
+      submitData.append('HasKeys', formData.hasKeys.toString());
+      submitData.append('TitleState', formData.titleState);
+      
+      // Conditional Estimated Retail Value
+      if (formData.estimatedRetailValue > 0) {
+        submitData.append('EstimatedRetailValue', formData.estimatedRetailValue.toString());
+      }
+      
+      // User Authentication
+      if (user?.user?.id) {
+        submitData.append('OwnerId', user.user.id);
+      } else {
+        setErrors({ submit: 'Kimlik doğrulama xətası: İstifadəçi ID-si mövcud deyil. Yenidən daxil olun.' });
+        setLoading(false);
+        return;
+      }
+      
+      // Image Upload (first image)
+      if (images.length > 0) {
+        submitData.append('Image', images[0]);
+      }
+      
+      // Debug logging for development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Submitting vehicle data:', {
+          make: formData.make,
+          model: formData.model,
+          year: formData.year,
+          vin: formData.vin,
+          color: selectedColor,
+          fuelType: formData.fuelType,
+          damageType: formData.damageType,
+          transmission: formData.transmission,
+          driveTrain: formData.driveTrain,
+          carCondition: formData.carCondition,
+          titleType: formData.titleType,
+          price: formData.price,
+          currency: formData.currency,
+          mileage: formData.mileage,
+          mileageUnit: formData.mileageUnit,
+          hasKeys: formData.hasKeys,
+          titleState: formData.titleState,
+          estimatedRetailValue: formData.estimatedRetailValue,
+          imageCount: images.length
+        });
+      }
+      
+      const response = await fetch('https://localhost:7249/api/Car', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || localStorage.getItem('authToken')}`
+        },
+        body: submitData
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        
+        // Upload additional images if any
+        if (images.length > 1) {
+          await uploadAdditionalImages(result.id || result.carId, images.slice(1));
+        }
+        
+        setShowSuccess(true);
+        setTimeout(() => {
+          navigate('/my-vehicles');
+        }, 2000);
+      } else {
+        const errorText = await response.text();
+        let errorMessage = 'Avtomobil yaradıla bilmədi. Yenidən cəhd edin.';
+        
+        try {
+          const errorJson = JSON.parse(errorText);
+          if (errorJson.message) {
+            errorMessage = errorJson.message;
+          } else if (errorJson.errors) {
+            const errorMessages = Object.values(errorJson.errors).flat();
+            errorMessage = errorMessages.join(', ');
+          }
+        } catch (parseError) {
+          console.error('Error parsing response:', parseError);
+          // Keep original errorText if parsing fails
+        }
+        
+        setErrors({ submit: errorMessage });
+      }
+    } catch (error) {
+      console.error('Error submitting vehicle:', error);
+      setErrors({ submit: 'Şəbəkə xətası. Bağlantınızı yoxlayın və yenidən cəhd edin.' });
+    } finally {
+      setLoading(false);
+    }
+  }, [formData, selectedColor, images, user, validateForm, navigate]);
+
+  const uploadAdditionalImages = async (carId: string, images: File[]) => {
+    try {
+      for (const image of images) {
+        const formData = new FormData();
+        formData.append('File', image);
+        
+        const response = await fetch(`https://localhost:7249/api/Car/${carId}/photo`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token') || localStorage.getItem('authToken')}`
+          },
+          body: formData
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Failed to upload image for car ${carId}:`, {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error uploading additional images:', error);
+    }
+  };
 
   // Main return statement
   return (
@@ -1257,12 +1938,13 @@ const AddVehicle: React.FC = () => {
 
         {/* Progress Indicator */}
         <div className="mb-8">
-          <div className="flex items-center justify-center space-x-4">
+          <div className="flex items-center justify-center space-x-4" role="progressbar" aria-valuenow={currentStep} aria-valuemin={1} aria-valuemax={5} aria-label="Form addımları">
             {[1, 2, 3, 4, 5].map((step) => (
               <div key={step} className="flex items-center">
                 <button
                   type="button"
                   onClick={() => goToStep(step)}
+                  aria-label={`Addım ${step}${step === currentStep ? ' - hazırkı addım' : step < currentStep ? ' - tamamlanmış' : ' - gələcək addım'}`}
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all duration-300 ${
                     step === currentStep
                       ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/25'
@@ -1291,11 +1973,83 @@ const AddVehicle: React.FC = () => {
             
             <div className="relative z-10">
               {/* Step Content */}
-              {currentStep === 1 && <Step1BrandSelection />}
-              {currentStep === 2 && <Step2ModelYear />}
-              {currentStep === 3 && <Step3TechnicalSpecs />}
-              {currentStep === 4 && <Step4MediaUpload />}
-              {currentStep === 5 && <Step5Review />}
+              {currentStep === 1 && (
+                <Step1BrandSelection 
+                  selectedBrand={selectedBrand}
+                  brandQueryRef={brandQueryRef}
+                  handleBrandSelect={handleBrandSelect}
+                  goToStep={goToStep}
+                />
+              )}
+              {currentStep === 2 && (
+                <Step2ModelYear 
+                  errors={errors}
+                  selectedBrand={selectedBrand}
+                  selectedYear={selectedYear}
+                  modelInputValue={modelInputValue}
+                  showModelDropdown={showModelDropdown}
+                  filteredModels={filteredModels}
+                  modelSearchTermRef={modelSearchTermRef}
+                  yearRef={yearRef}
+                  handleModelSelect={handleModelSelect}
+                  handleModelInputChange={handleModelInputChange}
+                  handleModelInputFocus={handleModelInputFocus}
+                  handleModelInputBlur={handleModelInputBlur}
+                  handleYearSelect={handleYearSelect}
+                />
+              )}
+              {currentStep === 3 && (
+                <Step3TechnicalSpecs 
+                  formData={formData}
+                  errors={errors}
+                  selectedColor={selectedColor}
+                  locationOptions={locationOptions}
+                  vinRef={vinRef}
+                  bodyStyleRef={bodyStyleRef}
+                  fuelTypeRef={fuelTypeRef}
+                  damageTypeRef={damageTypeRef}
+                  secondaryDamageRef={secondaryDamageRef}
+                  transmissionRef={transmissionRef}
+                  driveTrainRef={driveTrainRef}
+                  carConditionRef={carConditionRef}
+                  titleTypeRef={titleTypeRef}
+                  mileageRef={mileageRef}
+                  mileageUnitRef={mileageUnitRef}
+                  priceRef={priceRef}
+                  currencyRef={currencyRef}
+                  locationIdRef={locationIdRef}
+                  hasKeysRef={hasKeysRef}
+                  titleStateRef={titleStateRef}
+                  estimatedRetailValueRef={estimatedRetailValueRef}
+                  handleInputChange={handleInputChange}
+                  handleColorSelect={handleColorSelect}
+                />
+              )}
+              {currentStep === 4 && (
+                <Step4MediaUpload 
+                  images={images}
+                  imagePreviews={imagePreviews}
+                  videoPreview={videoPreview}
+                  dragOver={dragOver}
+                  errors={errors}
+                  handleFileInputChange={handleFileInputChange}
+                  handleDragOver={handleDragOver}
+                  handleDragLeave={handleDragLeave}
+                  handleDrop={handleDrop}
+                  removeFile={removeFile}
+                />
+              )}
+              {currentStep === 5 && (
+                <Step5Review 
+                  formData={formData}
+                  selectedBrand={selectedBrand}
+                  selectedColor={selectedColor}
+                  locationOptions={locationOptions}
+                  images={images}
+                  errors={errors}
+                  loading={loading}
+                />
+              )}
 
               {/* Navigation Buttons */}
               <div className="flex justify-between mt-12">

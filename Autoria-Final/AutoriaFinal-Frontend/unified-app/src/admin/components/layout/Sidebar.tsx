@@ -9,6 +9,7 @@ import {
   FileText, 
   BarChart3, 
   Settings,
+  MapPin,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react'
@@ -25,6 +26,7 @@ const navigation: NavItem[] = [
   { name: 'Auctions', href: '/admin/auctions', icon: Gavel },
   { name: 'Users', href: '/admin/users', icon: Users },
   { name: 'Roles', href: '/admin/roles', icon: Shield },
+  { name: 'Locations', href: '/admin/locations', icon: MapPin },
   { name: 'Audit Logs', href: '/admin/audit', icon: FileText },
   { name: 'Reports', href: '/admin/reports', icon: BarChart3 },
   { name: 'Settings', href: '/admin/settings', icon: Settings },

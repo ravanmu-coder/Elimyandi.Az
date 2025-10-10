@@ -8,12 +8,12 @@ namespace AutoriaFinal.Domain.Enums.VehicleEnums
 {
     public enum TitleType
     {
-        Unknown,
-        Clean,
-        Salvage,
-        NonRepairable,
-        CertificateOfDestruction,
-        Rebuilt,
-        Junk
+        Unknown = 0,
+        Clean = 1,
+        Salvage = 2,
+        NonRepairable = 3,
+        CertificateOfDestruction = 4,
+        Rebuilt = 5,
+        Junk = 6
     }
 }

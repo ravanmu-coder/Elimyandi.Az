@@ -11,64 +11,74 @@ namespace AutoriaFinal.Domain.Entities.Auctions
 {
     public class Car : BaseEntity
     {
-        public string OwnerId { get;  set; }  = default!;
+        public string OwnerId { get; set; } = default!;
         public ApplicationUser Owner { get; set; } = default!;
-        public string Vin { get;  set; } = default!;
-        public int Year { get;  set; }
-        public string Make { get;  set; } = default!;
+
+        public string Vin { get; set; } = default!;
+        public int Year { get; set; }
+        public string Make { get; set; } = default!;
         public string Model { get; set; } = default!;
         public string? BodyStyle { get; set; }
         public string? Color { get; set; }
-        public int? Odometer { get; set; }
-        public string OdometerUnit { get; set; } = "km"; // "mi"/"km"
 
-        public FuelType Fuel { get; set; } = FuelType.Unknown;
+        // ✅ Frontend ilə uyğun field names
+        public int Mileage { get; set; }  // Əvvəlki Odometer-dən dəyişdirildi
+        public string MileageUnit { get; set; } = "km"; // Əvvəlki OdometerUnit-dən dəyişdirildi
+
+        // ✅ Price məlumatları əlavə edildi
+        public decimal Price { get; set; }
+        public string Currency { get; set; } = "AZN";
+
+        // ✅ Frontend ilə uyğun enum field names
+        public FuelType FuelType { get; set; } = FuelType.Unknown; // Əvvəlki Fuel-dən dəyişdirildi
         public Transmission Transmission { get; set; } = Transmission.Unknown;
         public DriveTrain DriveTrain { get; set; } = DriveTrain.Unknown;
-        public CarCondition Condition { get;     set; } = CarCondition.Unknown;
+        public CarCondition CarCondition { get; set; } = CarCondition.Unknown; // Əvvəlki Condition-dən dəyişdirildi
         public bool HasKeys { get; set; }
 
-        public DamageType PrimaryDamage { get;  set; } = DamageType.Unknown;
-        public DamageType SecondaryDamage { get;  set; } = DamageType.Unknown;
+        // ✅ Damage field names dəyişdirildi
+        public DamageType DamageType { get; set; } = DamageType.Unknown; // Əvvəlki PrimaryDamage-dən dəyişdirildi
+        public DamageType? SecondaryDamage { get; set; } = DamageType.Unknown;
 
         public TitleType TitleType { get; set; } = TitleType.Unknown;
         public string? TitleState { get; set; }
 
+        // ✅ EstimatedRetailValue saxlanılır
         public decimal? EstimatedRetailValue { get; set; }
 
-        public string PhotoUrls { get;  set; }= new string("");
-        public string VideoUrls { get;  set; } = new string("");
+        public string PhotoUrls { get; set; } = new string("");
+        public string VideoUrls { get; set; } = new string("");
         public Guid? LocationId { get; set; }
         public Location? Location { get; set; } = default!;
 
         public ICollection<Support.Document> Documents { get; set; } = new List<Support.Document>();
 
         #region Helper Methods
-        public void SetOdometer(int? value, string unit)
+        public void SetMileage(int value, string unit)
         {
-            Odometer = value;
-            OdometerUnit = unit;
+            Mileage = value;
+            MileageUnit = unit;
             MarkUpdated();
         }
 
-        public void SetSpec(FuelType fuel, Transmission trans, DriveTrain drive)
+        public void SetSpecs(FuelType fuelType, Transmission transmission, DriveTrain driveTrain)
         {
-            Fuel = fuel;
-            Transmission = trans;
-            DriveTrain = drive;
+            FuelType = fuelType;
+            Transmission = transmission;
+            DriveTrain = driveTrain;
             MarkUpdated();
         }
 
-        public void SetCondition(CarCondition condition, bool hasKeys)
+        public void SetCondition(CarCondition carCondition, bool hasKeys)
         {
-            Condition = condition;
+            CarCondition = carCondition;
             HasKeys = hasKeys;
             MarkUpdated();
         }
 
-        public void SetDamage(DamageType primary, DamageType secondary)
+        public void SetDamage(DamageType primary, DamageType? secondary = null)
         {
-            PrimaryDamage = primary;
+            DamageType = primary;
             SecondaryDamage = secondary;
             MarkUpdated();
         }
@@ -80,14 +90,18 @@ namespace AutoriaFinal.Domain.Entities.Auctions
             MarkUpdated();
         }
 
+        public void SetPrice(decimal price, string currency = "AZN")
+        {
+            Price = price;
+            Currency = currency;
+            MarkUpdated();
+        }
+
         public void SetErv(decimal? value)
         {
             EstimatedRetailValue = value;
             MarkUpdated();
         }
-
         #endregion
-
-
     }
 }

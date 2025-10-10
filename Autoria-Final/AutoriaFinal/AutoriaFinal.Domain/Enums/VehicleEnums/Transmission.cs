@@ -6,5 +6,10 @@ using System.Threading.Tasks;
 
 namespace AutoriaFinal.Domain.Enums.VehicleEnums
 {
-    public enum Transmission { Unknown, Automatic, Manual, CVT }
+    public enum Transmission { 
+        Unknown = 0,
+        Automatic = 1,
+        Manual = 2,
+        CVT = 3
+    }
 }

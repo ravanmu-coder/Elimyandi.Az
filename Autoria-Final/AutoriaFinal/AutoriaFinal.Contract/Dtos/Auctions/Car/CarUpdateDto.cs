@@ -17,17 +17,22 @@ namespace AutoriaFinal.Contract.Dtos.Auctions.Car
         public string? BodyStyle { get; set; }
         public string? Color { get; set; }
         public Guid LocationId { get; set; }
-        public int? Odometer { get; set; }
-        public string OdometerUnit { get; set; } = "km";
 
-        public FuelType Fuel { get; set; }
-        public Transmission Transmission { get; set; }
-        public DriveTrain DriveTrain { get; set; }
-        public CarCondition Condition { get; set; }
+        // ✅ Entity ilə uyğun field names  
+        public int Mileage { get; set; }                    // Odometer → Mileage
+        public string MileageUnit { get; set; } = "km";     // OdometerUnit → MileageUnit
+        public decimal Price { get; set; }                  // Yeni sahə
+        public string Currency { get; set; } = "AZN";       // Yeni sahə
+
+        // ✅ Enum fields - entity ilə uyğun names
+        public FuelType FuelType { get; set; }              // Fuel → FuelType
+        public DamageType DamageType { get; set; }          // PrimaryDamage → DamageType
+        public Transmission Transmission { get; set; }      // Yeni sahə
+        public DriveTrain DriveTrain { get; set; }          // Yeni sahə
+        public CarCondition CarCondition { get; set; }     // Condition → CarCondition
+        public TitleType TitleType { get; set; }            // Yeni sahə
+        public DamageType? SecondaryDamage { get; set; }    // Yeni sahə
         public bool HasKeys { get; set; }
-        public DamageType PrimaryDamage { get; set; }
-        public DamageType SecondaryDamage { get; set; }
-        public TitleType TitleType { get; set; }
         public string? TitleState { get; set; }
         public decimal? EstimatedRetailValue { get; set; }
 

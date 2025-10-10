@@ -1056,21 +1056,150 @@ class ApiClient {
     }
   }
 
-  // Users - Note: These endpoints may not exist in the current API
+  // Users - Admin User Management API Endpoints
   async getUsers(params?: {
     page?: number
     limit?: number
     role?: string
     status?: string
     search?: string
-  }) {
+    sortBy?: string
+    sortDirection?: 'asc' | 'desc'
+  }): Promise<PagedResponse<any>> {
     try {
-      // This endpoint might not exist, so we'll return empty array for now
-      console.warn('Users endpoint not available in current API')
-      return []
+      let endpoint = '/api/Admin/users'
+      const queryParams = new URLSearchParams()
+      
+      if (params?.page) queryParams.append('page', params.page.toString())
+      if (params?.limit) queryParams.append('limit', params.limit.toString())
+      if (params?.role) queryParams.append('role', params.role)
+      if (params?.status) queryParams.append('status', params.status)
+      if (params?.search) queryParams.append('search', params.search)
+      if (params?.sortBy) queryParams.append('sortBy', params.sortBy)
+      if (params?.sortDirection) queryParams.append('sortDirection', params.sortDirection)
+      
+      if (queryParams.toString()) {
+        endpoint += `?${queryParams.toString()}`
+      }
+      
+      const response = await this.request<any>(endpoint)
+      
+      // Handle different response formats
+      if (response && typeof response === 'object') {
+        if (response.data && response.pagination) {
+          // AdminPagedResponseDto format
+          return {
+            items: response.data,
+            totalItems: response.pagination.totalItems,
+            totalPages: response.pagination.totalPages,
+            currentPage: params?.page || 1,
+            pageSize: params?.limit || 20
+          }
+        } else if (response.items && response.totalItems) {
+          // Direct PagedResponse format
+          return response
+        } else if (Array.isArray(response)) {
+          // Simple array response
+          return {
+            items: response,
+            totalItems: response.length,
+            totalPages: 1,
+            currentPage: 1,
+            pageSize: response.length
+          }
+        }
+      }
+      
+      // Fallback for unexpected response format
+      console.warn('Unexpected users API response format:', response)
+      return {
+        items: [],
+        totalItems: 0,
+        totalPages: 0,
+        currentPage: params?.page || 1,
+        pageSize: params?.limit || 20
+      }
     } catch (error) {
       console.error('Error getting users:', error)
-      return []
+      // Return empty result instead of throwing error
+      return {
+        items: [],
+        totalItems: 0,
+        totalPages: 0,
+        currentPage: params?.page || 1,
+        pageSize: params?.limit || 20
+      }
+    }
+  }
+
+  async getUserStatistics(): Promise<any> {
+    try {
+      return this.request<any>('/api/Admin/statistics/users')
+    } catch (error) {
+      console.error('Error getting user statistics:', error)
+      // Return default stats if endpoint doesn't exist
+      return {
+        totalUsers: 0,
+        activeUsers: 0,
+        newUsersToday: 0,
+        bannedUsers: 0,
+        pendingUsers: 0
+      }
+    }
+  }
+
+  async updateUserStatus(userId: string, status: 'active' | 'inactive' | 'banned', reason?: string): Promise<any> {
+    try {
+      return this.request<any>(`/api/Admin/users/${userId}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ 
+          isActive: status === 'active',
+          status: status,
+          reason: reason || ''
+        })
+      })
+    } catch (error) {
+      console.error('Error updating user status:', error)
+      throw error
+    }
+  }
+
+  async assignRoleToUser(userId: string, role: string): Promise<any> {
+    try {
+      return this.request<any>(`/api/Admin/users/${userId}/roles`, {
+        method: 'POST',
+        body: JSON.stringify({ role })
+      })
+    } catch (error) {
+      console.error('Error assigning role to user:', error)
+      throw error
+    }
+  }
+
+  async removeRoleFromUser(userId: string, role: string): Promise<any> {
+    try {
+      return this.request<any>(`/api/Admin/users/${userId}/roles/${role}`, {
+        method: 'DELETE'
+      })
+    } catch (error) {
+      console.error('Error removing role from user:', error)
+      throw error
+    }
+  }
+
+  async bulkUserAction(action: string, userIds: string[], reason?: string): Promise<any> {
+    try {
+      return this.request<any>('/api/Admin/users/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ 
+          action, 
+          userIds,
+          reason: reason || ''
+        })
+      })
+    } catch (error) {
+      console.error('Error performing bulk user action:', error)
+      throw error
     }
   }
 
@@ -1213,22 +1342,150 @@ class ApiClient {
     }
   }
 
-  // Locations
-  async getLocations() {
+  // Locations - Complete CRUD operations
+  async getLocations(params?: {
+    page?: number
+    limit?: number
+    search?: string
+    region?: string
+    city?: string
+    status?: string
+    sortBy?: string
+    sortDirection?: 'asc' | 'desc'
+  }): Promise<PagedResponse<any>> {
     try {
-      return this.request<any[]>('/api/Location')
+      let endpoint = '/api/Location'
+      const queryParams = new URLSearchParams()
+      
+      if (params?.page) queryParams.append('page', params.page.toString())
+      if (params?.limit) queryParams.append('limit', params.limit.toString())
+      if (params?.search) queryParams.append('search', params.search)
+      if (params?.region) queryParams.append('region', params.region)
+      if (params?.city) queryParams.append('city', params.city)
+      if (params?.status) queryParams.append('status', params.status)
+      if (params?.sortBy) queryParams.append('sortBy', params.sortBy)
+      if (params?.sortDirection) queryParams.append('sortDirection', params.sortDirection)
+      
+      if (queryParams.toString()) {
+        endpoint += `?${queryParams.toString()}`
+      }
+      
+      const response = await this.request<any>(endpoint)
+      
+      // Handle different response formats
+      if (response && typeof response === 'object') {
+        if (response.items && response.totalItems) {
+          // Direct PagedResponse format
+          return response
+        } else if (response.data && response.pagination) {
+          // Wrapped in data property with pagination
+          return {
+            items: response.data,
+            totalItems: response.pagination.totalItems,
+            totalPages: response.pagination.totalPages,
+            currentPage: params?.page || 1,
+            pageSize: params?.limit || 20
+          }
+        } else if (Array.isArray(response)) {
+          // Simple array response - convert to paged format
+          return {
+            items: response,
+            totalItems: response.length,
+            totalPages: 1,
+            currentPage: 1,
+            pageSize: response.length
+          }
+        }
+      }
+      
+      // Fallback for unexpected response format
+      console.warn('Unexpected locations API response format:', response)
+      return {
+        items: [],
+        totalItems: 0,
+        totalPages: 0,
+        currentPage: params?.page || 1,
+        pageSize: params?.limit || 20
+      }
     } catch (error) {
       console.error('Error getting locations:', error)
-      return []
+      // Return empty result instead of throwing error
+      return {
+        items: [],
+        totalItems: 0,
+        totalPages: 0,
+        currentPage: params?.page || 1,
+        pageSize: params?.limit || 20
+      }
     }
   }
 
   async getLocationById(id: string) {
     try {
-      return this.request<any>(`/api/location/${id}`)
+      return this.request<any>(`/api/Location/${id}`)
     } catch (error) {
       console.error('Error getting location by ID:', error)
       return null
+    }
+  }
+
+  async createLocation(data: any) {
+    try {
+      console.log('Creating location with data:', data)
+      const result = await this.request<any>('/api/Location', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      })
+      console.log('Location created successfully:', result)
+      return result
+    } catch (error) {
+      console.error('Error creating location:', error)
+      throw error
+    }
+  }
+
+  async updateLocation(id: string, data: any) {
+    try {
+      console.log('Updating location with data:', data)
+      const result = await this.request<any>(`/api/Location/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      })
+      console.log('Location updated successfully:', result)
+      return result
+    } catch (error) {
+      console.error('Error updating location:', error)
+      throw error
+    }
+  }
+
+  async deleteLocation(id: string) {
+    try {
+      console.log('Deleting location:', id)
+      const result = await this.request<void>(`/api/Location/${id}`, {
+        method: 'DELETE',
+      })
+      console.log('Location deleted successfully:', result)
+      return result
+    } catch (error) {
+      console.error('Error deleting location:', error)
+      throw error
+    }
+  }
+
+  async getLocationStats() {
+    try {
+      return this.request<any>('/api/Location/stats')
+    } catch (error) {
+      console.error('Error getting location stats:', error)
+      // Return default stats if endpoint doesn't exist
+      return {
+        totalLocations: 0,
+        activeLocations: 0,
+        totalAuctions: 0,
+        totalVehicles: 0,
+        upcomingAuctions: 0
+      }
     }
   }
 
@@ -1292,6 +1549,43 @@ class ApiClient {
       return response
     } catch (error) {
       console.error('Error getting enum metadata:', error)
+      throw error
+    }
+  }
+
+  // Admin Dashboard API Endpoints
+  async getAdminDashboard() {
+    try {
+      return this.request<any>('/api/Admin/dashboard')
+    } catch (error) {
+      console.error('Error getting admin dashboard data:', error)
+      throw error
+    }
+  }
+
+  async getAdminUserStatistics() {
+    try {
+      return this.request<any>('/api/Admin/statistics/users')
+    } catch (error) {
+      console.error('Error getting admin user statistics:', error)
+      throw error
+    }
+  }
+
+  async getAdminSystemHealth() {
+    try {
+      return this.request<any>('/api/Admin/system/health')
+    } catch (error) {
+      console.error('Error getting admin system health:', error)
+      throw error
+    }
+  }
+
+  async getAdminRecentActivities() {
+    try {
+      return this.request<any>('/api/Admin/activities/recent')
+    } catch (error) {
+      console.error('Error getting admin recent activities:', error)
       throw error
     }
   }

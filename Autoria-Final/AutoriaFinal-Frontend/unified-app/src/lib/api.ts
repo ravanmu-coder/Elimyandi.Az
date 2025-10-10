@@ -471,7 +471,7 @@ class ApiClient {
     return this.request<any>(`/api/Location/${id}`);
   }
 
-  // Car photos endpoint
+  // Enhanced car photo methods with better error handling and caching
   async getCarPhotos(id: string): Promise<any[]> {
     try {
       console.log(`Fetching car photos for ID: ${id}`);
@@ -482,6 +482,48 @@ class ApiClient {
       console.warn(`Error fetching car photos ${id}:`, error);
       // Return empty array instead of throwing error
       return [];
+    }
+  }
+
+  // Image preloading utility
+  async preloadImages(urls: string[]): Promise<void> {
+    const preloadPromises = urls.map(url => {
+      return new Promise<void>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error(`Failed to preload image: ${url}`));
+        img.src = url;
+      });
+    });
+
+    try {
+      await Promise.allSettled(preloadPromises);
+      console.log(`Preloaded ${urls.length} images`);
+    } catch (error) {
+      console.warn('Some images failed to preload:', error);
+    }
+  }
+
+  // Enhanced car data fetching with image processing
+  async getCarWithImages(id: string): Promise<any> {
+    try {
+      console.log(`Fetching car with images for ID: ${id}`);
+      const carData = await this.request<any>(`/api/Car/${id}`);
+      console.log('Car data received:', carData);
+      
+      // Process PhotoUrls to ensure consistent format
+      if (carData.photoUrls) {
+        if (typeof carData.photoUrls === 'string') {
+          // Convert semicolon-separated string to array
+          carData.photoUrls = carData.photoUrls.split(';').filter((url: string) => url.trim() !== '');
+        }
+        console.log('Processed PhotoUrls:', carData.photoUrls);
+      }
+      
+      return carData;
+    } catch (error) {
+      console.error(`Error fetching car with images ${id}:`, error);
+      throw error;
     }
   }
 

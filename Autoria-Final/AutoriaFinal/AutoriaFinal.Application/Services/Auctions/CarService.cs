@@ -49,6 +49,8 @@ namespace AutoriaFinal.Application.Services.Auctions
         public async Task<CarDetailDto> AddCarAsync(CarCreateDto dto, string ownerId)
         {
             _logger.LogInformation("Creating car (VIN: {Vin}) for owner {OwnerId}", dto?.Vin, ownerId);
+            _logger.LogInformation("Received DTO data: Make={Make}, Model={Model}, Year={Year}, FuelType={FuelType}, DamageType={DamageType}, Price={Price}, Mileage={Mileage}",
+                dto?.Make, dto?.Model, dto?.Year, dto?.FuelType, dto?.DamageType, dto?.Price, dto?.Mileage);
 
             if (dto == null)
             {
@@ -86,6 +88,9 @@ namespace AutoriaFinal.Application.Services.Auctions
 
             var entity = _mapper.Map<Car>(dto);
             entity.OwnerId = ownerId;
+
+            _logger.LogInformation("Mapped entity data: Make={Make}, Model={Model}, Year={Year}, FuelType={FuelType}, DamageType={DamageType}, Price={Price}, Mileage={Mileage}",
+                entity.Make, entity.Model, entity.Year, entity.FuelType, entity.DamageType, entity.Price, entity.Mileage);
 
             await _carRepository.AddAsync(entity);
             await _unitOfWork.SaveChangesAsync();

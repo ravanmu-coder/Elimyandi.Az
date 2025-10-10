@@ -8,8 +8,8 @@ namespace AutoriaFinal.Domain.Enums.AuctionEnums
 {
     public enum BidStatus
     {
-        Placed,
-        Retracted,
-        Invalidated
+        Placed = 0,
+        Retracted = 1,
+        Invalidated = 2
     }
 }

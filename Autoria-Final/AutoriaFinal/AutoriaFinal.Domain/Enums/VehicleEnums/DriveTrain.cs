@@ -8,6 +8,10 @@ namespace AutoriaFinal.Domain.Enums.VehicleEnums
 {
     public enum DriveTrain
     {
-        Unknown, FWD, RWD, AWD, FourWD
+        Unknown = 0,
+        FWD = 1,
+        RWD = 2,
+        AWD = 3,
+        FourWD = 4
     }
 }
